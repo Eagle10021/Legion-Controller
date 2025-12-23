@@ -1,6 +1,6 @@
 # Legion Controller
 
-A graphical user interface for controlling keyboard RGB lighting and power modes (Conservation/Rapid Charge) on Lenovo Legion laptops. This application is optimized for **Gnome on Wayland**.
+A graphical user interface for controlling keyboard RGB lighting and power modes (Conservation/Rapid Charge) on Lenovo Legion laptops. This application is designed specifically for **4-zone RGB models** and is optimized for **Gnome on Wayland**.
 
 ![Legion Controller Preview](images/preview.png)
 
