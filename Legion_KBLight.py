@@ -374,7 +374,7 @@ class LegionLightApp(ctk.CTk):
             ctk.CTkOptionMenu(power_content_frame, variable=self.power_mode_var, values=modes, command=self.set_power_mode,
                               fg_color="#333", button_color="#222", corner_radius=6).pack(fill="x", pady=(0, 5))
             
-            ctk.CTkLabel(power_content_frame, text="Conservation ~60% Limit. Rapid = Fast Charge. Normal Mode = Standard.", font=("Segoe UI", 11), text_color="#555", wraplength=300).pack(anchor="w", pady=(5,0))
+            ctk.CTkLabel(power_content_frame, text="Conservation ~60-80% Limit. Rapid = Fast Charge. Normal Mode = Standard.", font=("Segoe UI", 11), text_color="#555", wraplength=300).pack(anchor="w", pady=(5,0))
             
             if not self.power_controller.has_rapid:
                  ctk.CTkLabel(power_content_frame, text="Note: Rapid Charge may be missing due to kernel/firmware limitations on Linux.", font=("Segoe UI", 10), text_color="#444", wraplength=300).pack(anchor="w", pady=(5,0))
