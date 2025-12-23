@@ -111,4 +111,4 @@ StartupWMClass=legioncontrol
 ## Technical Credits
 
 - **Backend Logic**: This project is built upon the excellent lighting control reverse-engineering work done in [l5p-kbl-2024-Gen9](https://github.com/Drakanio/l5p-kbl-2024-Gen9/tree/main) by Drakanio and the original [l5p-kbl](https://github.com/imShara/l5p-kbl) by imShara.
-- **Icon**: `Senko_Loaf.jpg`
+- **Icon**: [Senko Loaf](https://knowyourmeme.com/memes/senko-loaf) (`Senko_Loaf.jpg`)
