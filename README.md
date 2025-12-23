@@ -2,6 +2,8 @@
 
 A premium graphical user interface for controlling keyboard RGB lighting and power modes (Conservation/Rapid Charge) on Lenovo Legion laptops. This application is optimized for **Gnome on Wayland**.
 
+![Legion Controller Preview](images/preview.png)
+
 ## Features
 - **4-Zone RGB Control**: Static, Breath, Wave, and Hue effects.
 - **Power Management**: Toggle Conservation Mode (~60% battery limit) and Rapid Charge. *(Note: Rapid Charge is currently non-functional on many models as the sysfs files cannot be located).*
