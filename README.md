@@ -1,6 +1,6 @@
 # Legion Controller
 
-A premium graphical user interface for controlling keyboard RGB lighting and power modes (Conservation/Rapid Charge) on Lenovo Legion laptops. This application is optimized for **Gnome on Wayland**.
+A graphical user interface for controlling keyboard RGB lighting and power modes (Conservation/Rapid Charge) on Lenovo Legion laptops. This application is optimized for **Gnome on Wayland**.
 
 ![Legion Controller Preview](images/preview.png)
 
@@ -9,7 +9,7 @@ A premium graphical user interface for controlling keyboard RGB lighting and pow
 - **Power Management**: Toggle Conservation Mode (~60% or 80% limit based on model) and Rapid Charge. *(Note: Rapid Charge is currently non-functional on many models as the sysfs files cannot be located).*
 - **System Dashboard**: View hardware specs (CPU, GPU, RAM) and battery status.
 - **Profiles**: Save and switch between custom lighting setups.
-- **Premium UI**: Modern dark-mode interface with Miku/Teto/Neru color themes.
+- **Themed UI**: Dark-mode interface with Miku/Teto/Neru color themes.
 
 > [!IMPORTANT]
 > **Rapid Charge Note**: This feature currently may not work correctly or appear in the UI because the required kernel/firmware files (`rapid_charge`) are often missing or relocated on Linux systems. **Conservation Mode** (~60% or 80% limit depending on model) and **Normal Charging** remain fully functional.
@@ -54,7 +54,7 @@ By default, Linux requires root to access USB devices. Create a udev rule to run
 
 ## 2. Installation & Organization
 
-For the best experience, it is recommended to keep the application in your `Documents` folder for permanence.
+Note: It is suggested to keep the application in your `Documents` folder to ensure consistent file paths.
 
 ```bash
 # Clone the repository
