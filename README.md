@@ -10,7 +10,7 @@ A premium graphical user interface for controlling keyboard RGB lighting and pow
 - **Premium UI**: Modern dark-mode interface with Miku/Teto/Neru color themes.
 
 > [!IMPORTANT]
-> **Rapid Charge Note**: This feature currently may not work correctly or appear in the UI because the required kernel/firmware files (`rapid_charge`) are often missing or relocated on Linux systems. Conservation Mode remains fully functional.
+> **Rapid Charge Note**: This feature currently may not work correctly or appear in the UI because the required kernel/firmware files (`rapid_charge`) are often missing or relocated on Linux systems. **Conservation Mode** and **Normal Charging** remain fully functional.
 
 ---
 
