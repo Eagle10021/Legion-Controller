@@ -1,0 +1,6 @@
+config.json
+sys_info_cache.json
+__pycache__/
+*.pyc
+.vscode/
+.idea/
