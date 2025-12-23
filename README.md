@@ -50,6 +50,14 @@ By default, Linux requires root to access USB devices. Create a udev rule to run
    sudo udevadm control --reload-rules && sudo udevadm trigger
    ```
 
+5. **Update the Python Script**:
+   Open `Legion_KBLight.py` and ensure the `VENDOR` and `PRODUCT` IDs match your `lsusb` output (around lines 56-57). If your product ID was different (e.g. `c995`), change the `0xC965` value:
+   ```python
+   class LedController:
+       VENDOR = 0x048D
+       PRODUCT = 0xC965  # Replace with your Product ID
+   ```
+
 ---
 
 ## 2. Installation & Organization

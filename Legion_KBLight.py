@@ -53,8 +53,8 @@ class ToolTip:
 
 # --- Backend Classes ---
 class LedController:
-    VENDOR = 0x048D
-    PRODUCT = 0xC965
+    VENDOR = 0x048D # Replace with your Vendor ID (from lsusb)
+    PRODUCT = 0xC965 # Replace with your Product ID (from lsusb)
     EFFECT = {"static": 1, "breath": 3, "wave": 4, "hue": 6, "off": 1}
     def __init__(self):
         device = usb.core.find(idVendor=self.VENDOR, idProduct=self.PRODUCT)
