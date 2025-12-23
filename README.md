@@ -92,7 +92,9 @@ Categories=Utility;Settings;
 StartupWMClass=legioncontrol
 ```
 
-3. Save and Exit. The application should now appear in your Gnome dashboard.
+3. Save and Exit. 
+
+4. **Log out and log back in** for the application icon to appear in your dashboard and for the `udev` rules to take full effect.
 
 ---
 
