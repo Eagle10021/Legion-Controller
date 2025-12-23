@@ -6,6 +6,7 @@ A graphical user interface for controlling keyboard RGB lighting and power modes
 
 ## Features
 - **4-Zone RGB Control**: Static, Breath, Wave, and Hue effects.
+    - *Gradient Generator*: Automatically calculate smooth transitions (Zones 2 & 3) by simply selecting your desired start color in **Zone 1** and end color in **Zone 4**.
 - **Power Management**: Toggle Conservation Mode (~60% or 80% limit based on model) and Rapid Charge. *(Note: Rapid Charge is currently non-functional on many models as the sysfs files cannot be located).*
 - **System Dashboard**: View hardware specs (CPU, GPU, RAM) and battery status.
 - **Profiles**: Save and switch between custom lighting setups.

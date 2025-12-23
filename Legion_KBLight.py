@@ -438,8 +438,11 @@ class LegionLightApp(ctk.CTk):
         # -- Color Controls --
         
         # Tools Row
-        ctk.CTkButton(light_content_frame, text="GENERATE GRADIENT", height=28, fg_color="#333", corner_radius=6, hover_color="#444", 
-                      font=("Segoe UI", 11, "bold"), command=self.generate_gradient).pack(anchor="e", pady=(0,15))
+        # Gradient Generator
+        grad_btn = ctk.CTkButton(light_content_frame, text="GENERATE GRADIENT", height=28, fg_color="#333", corner_radius=6, hover_color="#444", 
+                      font=("Segoe UI", 11, "bold"), command=self.generate_gradient)
+        grad_btn.pack(anchor="e", pady=(0,15))
+        ToolTip(grad_btn, "Calculates a smooth transition between Zone 1 and Zone 4 colors")
         
         # Color Grid
         c_grid = ctk.CTkFrame(light_content_frame, fg_color="transparent")
