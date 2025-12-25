@@ -216,6 +216,11 @@ class LegionLightApp(ctk.CTk):
         self.pref_blink_opposite = ctk.BooleanVar(value=False)
         self.pref_solo_mode = ctk.BooleanVar(value=False)
         
+        # Battery Indicator Preferences
+        self.pref_batt_low = ctk.IntVar(value=15)
+        self.pref_batt_green = ctk.IntVar(value=75)
+        self.pref_batt_full = ctk.IntVar(value=95)
+        
         # UI Feedback states
         self.blink_active = True
         self.blink_loop()
@@ -1249,6 +1254,29 @@ class LegionLightApp(ctk.CTk):
         ctk.CTkSwitch(f2, text="", variable=self.pref_solo_mode, width=40,
                       command=self.save_settings).pack(side="right")
         ctk.CTkLabel(top, text="Darkens other zones when picking colors", font=("Segoe UI", 10), text_color="#555").pack(pady=(0, 20))
+        
+        # --- Battery Thresholds ---
+        ctk.CTkLabel(container, text="BATTERY THRESHOLDS", font=("Segoe UI", 12, "bold"), text_color=self.c_accent).pack(pady=(10, 5))
+        
+        def create_thresh_slider(parent, label, var, default):
+            f = ctk.CTkFrame(parent, fg_color="transparent")
+            f.pack(fill="x", pady=2)
+            ctk.CTkLabel(f, text=label, font=("Segoe UI", 11), text_color="#aaa").pack(side="left")
+            val_lbl = ctk.CTkLabel(f, text=f"{var.get()}%", font=("Segoe UI", 11, "bold"), text_color=self.c_accent, width=40)
+            val_lbl.pack(side="right")
+            
+            def on_slide(v):
+                var.set(int(float(v)))
+                val_lbl.configure(text=f"{var.get()}%")
+                self.save_settings()
+                
+            s = ctk.CTkSlider(f, from_=5, to=100, number_of_steps=95, command=on_slide, height=16)
+            s.set(var.get())
+            s.pack(side="right", padx=10, fill="x", expand=True)
+            
+        create_thresh_slider(container, "Low Alert (Blink)", self.pref_batt_low, 15)
+        create_thresh_slider(container, "Safe Level (Green)", self.pref_batt_green, 75)
+        create_thresh_slider(container, "Full Bar Trigger", self.pref_batt_full, 95)
 
         ctk.CTkButton(top, text="CLOSE", width=120, height=32, fg_color="#333", hover_color="#444", 
                       command=top.destroy, corner_radius=6).pack(pady=20)
@@ -1745,7 +1773,8 @@ class LegionLightApp(ctk.CTk):
              except: p = 0; status = 'Unknown'
              
              # CRITICAL WARNING: 
-             if p <= 15:
+             low_thresh = self.pref_batt_low.get()
+             if p <= low_thresh:
                  if status != "Charging":
                      # Discharging: Blink ALL Red
                      return ["ff0000" if step % 2 == 0 else "000000"] * 4
@@ -1755,13 +1784,15 @@ class LegionLightApp(ctk.CTk):
                      return [z1, "000000", "000000", "000000"]
              
              # Calculate how many zones to light up (Progress Bar)
+             full_thresh = self.pref_batt_full.get()
              count = 1
-             if p >= 95: count = 4
+             if p >= full_thresh: count = 4
              elif p >= 50: count = 3
              elif p >= 25: count = 2
              
              # Color scaling: Green (Full) -> Yellow (Half) -> Red (Low)
-             if p >= 75: base_col = (0, 255, 0)      # Green
+             green_thresh = self.pref_batt_green.get()
+             if p >= green_thresh: base_col = (0, 255, 0)      # Green
              elif p >= 45: base_col = (200, 200, 0) # Yellow-Gold
              elif p >= 20: base_col = (255, 120, 0) # Orange
              else: base_col = (255, 0, 0)         # Red
@@ -1839,6 +1870,9 @@ class LegionLightApp(ctk.CTk):
             "color_history": self.color_history,
             "pref_blink_opposite": self.pref_blink_opposite.get(),
             "pref_solo_mode": self.pref_solo_mode.get(),
+            "pref_batt_low": self.pref_batt_low.get(),
+            "pref_batt_green": self.pref_batt_green.get(),
+            "pref_batt_full": self.pref_batt_full.get(),
             "profiles": self.profiles
         }
         try:
@@ -1860,6 +1894,11 @@ class LegionLightApp(ctk.CTk):
                     self.color_history = data.get("color_history", ["#333333"] * 12)
                     self.pref_blink_opposite.set(data.get("pref_blink_opposite", False))
                     self.pref_solo_mode.set(data.get("pref_solo_mode", False))
+                    
+                    self.pref_batt_low.set(data.get("pref_batt_low", 15))
+                    self.pref_batt_green.set(data.get("pref_batt_green", 75))
+                    self.pref_batt_full.set(data.get("pref_batt_full", 95))
+                    
                     self.profiles = data.get("profiles", {"Default": self._get_current_settings_dict()})
                     self.current_profile_var.set(data.get("current_profile", "Default"))
                     # REMOVED load_profile call here as it triggers UI updates too early
