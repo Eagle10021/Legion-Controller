@@ -1258,25 +1258,40 @@ class LegionLightApp(ctk.CTk):
         # --- Battery Thresholds ---
         ctk.CTkLabel(container, text="BATTERY THRESHOLDS", font=("Segoe UI", 12, "bold"), text_color=self.c_accent).pack(pady=(10, 5))
         
-        def create_thresh_slider(parent, label, var, default):
+        def create_thresh_input(parent, label, var):
             f = ctk.CTkFrame(parent, fg_color="transparent")
-            f.pack(fill="x", pady=2)
+            f.pack(fill="x", pady=4)
             ctk.CTkLabel(f, text=label, font=("Segoe UI", 11), text_color="#aaa").pack(side="left")
-            val_lbl = ctk.CTkLabel(f, text=f"{var.get()}%", font=("Segoe UI", 11, "bold"), text_color=self.c_accent, width=40)
-            val_lbl.pack(side="right")
             
-            def on_slide(v):
-                var.set(int(float(v)))
-                val_lbl.configure(text=f"{var.get()}%")
-                self.save_settings()
-                
-            s = ctk.CTkSlider(f, from_=5, to=100, number_of_steps=95, command=on_slide, height=16)
-            s.set(var.get())
-            s.pack(side="right", padx=10, fill="x", expand=True)
+            # Label for "%"
+            ctk.CTkLabel(f, text="%", font=("Segoe UI", 11, "bold"), text_color="#555").pack(side="right", padx=(2, 5))
             
-        create_thresh_slider(container, "Low Alert (Blink)", self.pref_batt_low, 15)
-        create_thresh_slider(container, "Safe Level (Green)", self.pref_batt_green, 75)
-        create_thresh_slider(container, "Full Bar Trigger", self.pref_batt_full, 95)
+            e = ctk.CTkEntry(f, width=45, height=26, font=("Segoe UI", 11, "bold"), justify="center", border_width=1)
+            e.insert(0, str(var.get()))
+            e.pack(side="right")
+            
+            def validate_and_save(event=None):
+                try:
+                    val = int(e.get())
+                    if 0 <= val <= 100:
+                        var.set(val)
+                        self.save_settings()
+                        e.configure(border_color="#333") # Reset to neutral
+                    else:
+                        e.configure(border_color="#ff4444") # Red for error
+                        e.delete(0, "end")
+                        e.insert(0, str(var.get())) # Revert
+                except:
+                    e.configure(border_color="#ff4444")
+                    e.delete(0, "end")
+                    e.insert(0, str(var.get())) # Revert
+            
+            e.bind("<FocusOut>", validate_and_save)
+            e.bind("<Return>", validate_and_save)
+            
+        create_thresh_input(container, "Low Alert (Blink)", self.pref_batt_low)
+        create_thresh_input(container, "Safe Level (Green)", self.pref_batt_green)
+        create_thresh_input(container, "Full Bar Trigger", self.pref_batt_full)
 
         ctk.CTkButton(top, text="CLOSE", width=120, height=32, fg_color="#333", hover_color="#444", 
                       command=top.destroy, corner_radius=6).pack(pady=20)

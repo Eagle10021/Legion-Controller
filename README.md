@@ -32,7 +32,7 @@ A graphical user interface for controlling keyboard RGB lighting and power modes
 ### System Dashboard and Tools
 *   **Hardware Monitoring**: Real-time display of CPU, GPU, and RAM specifications.
 *   **Advanced Battery Diagnostics**: Beyond simple percentage, the dashboard tracks:
-    *   **Customizable Thresholds**: Set your own limits for Low Battery Alerts (Blink), Safe Levels (Green Shift), and Full Bar Triggers (BIOS Adjustment) directly in the settings menu.
+    *   **Customizable Thresholds**: Set your own limits for Low Battery Alerts (Blink), Safe Levels (Green Shift), and Full Bar Triggers (BIOS Adjustment) via numeric input fields in the settings menu.
     *   **Real-time Wattage**: Monitor exact discharge or charge speed in Watts.
     *   **Health Tracking**: Compare current Wh capacity against original design capacity.
     *   **Time Estimates**: Dynamic calculations for time until empty or time until full charge.
