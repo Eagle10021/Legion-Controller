@@ -7,6 +7,8 @@ import re
 import platform
 import subprocess
 import math
+import random
+import colorsys
 import usb.core
 import customtkinter as ctk
 from PIL import Image, ImageOps, ImageDraw
@@ -200,8 +202,28 @@ class LegionLightApp(ctk.CTk):
         self.effect_var = ctk.StringVar(value="static")
         self.brightness_var = ctk.StringVar(value="Low")
         self.speed_var = ctk.IntVar(value=2)
-        self.color_vars = [ctk.StringVar(value="ff0000") for _ in range(4)]
+        self.color_vars = [ctk.StringVar(value="39c5bb") for _ in range(4)]
+        self.last_on_colors = ["39c5bb" for _ in range(4)] # Store colors for turning back on
+        self.selected_zone = 0 # Track which zone is being edited
+        self.color_history = ["#333333"] * 12 # History of 12 user colors
         self.wave_direction_var = ctk.StringVar(value="LTR")
+        
+        # Software Animation State
+        self.sw_animation_step = 0
+        self.sw_active_colors = ["000000"] * 4
+        
+        # User Preferences (Advanced Selection)
+        self.pref_blink_opposite = ctk.BooleanVar(value=False)
+        self.pref_solo_mode = ctk.BooleanVar(value=False)
+        
+        # UI Feedback states
+        self.blink_active = True
+        self.blink_loop()
+        self.sw_animation_loop()
+        
+        # Resize tracking to prevent infinite loops
+        self.last_kb_size = (0, 0)
+        self.last_sv_size = (0, 0)
         
         self.cache_file = os.path.join(current_dir, "sys_info_cache.json")
         self.sys_info_cache = {}
@@ -234,8 +256,7 @@ class LegionLightApp(ctk.CTk):
         # 1. Update general UI state
         self.after(20, self.update_control_ui)
         
-        # 2. Sync theme button (without triggering save)
-        self.after(60, lambda: self.theme_seg.set(self.theme_var_str.get()))
+        # 2. Sync is now handled by update_control_ui
         
         # 3. Reload profile colors specialized for swatches
         # MUST CALL THIS AFTER UI IS BUILT
@@ -247,7 +268,10 @@ class LegionLightApp(ctk.CTk):
         # 5. Apply theme to all dynamic elements (still locked)
         self.after(200, lambda: self.toggle_theme_str(self.theme_var_str.get()))
         
-        # 6. UNLOCK SAVING & ACTIVATE AUTO-SAVE TRACE
+        # 6. Initialize (No selection on startup)
+        self.after(250, lambda: self.select_zone(-1))
+        
+        # 7. UNLOCK SAVING & ACTIVATE AUTO-SAVE TRACE
         def finish_setup():
             self._finish_loading()
             # Register trace AFTER initial load is fully finished
@@ -266,29 +290,24 @@ class LegionLightApp(ctk.CTk):
         # Added accent border
         self.root_frame = ctk.CTkFrame(self, fg_color=self.c_bg, corner_radius=15, border_width=2, border_color="#222")
         self.root_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        # Global deselect: clicking any black space in the app clears zone focus
+        self.root_frame.bind("<Button-1>", lambda e: self.select_zone(-1), add="+")
         
         # --- Header (Packed Top) ---
         header = ctk.CTkFrame(self.root_frame, fg_color="transparent")
-        header.pack(side="top", fill="x", padx=40, pady=(35, 20))
+        header.pack(side="top", fill="x", padx=40, pady=(20, 10))
+        header.bind("<Button-1>", lambda e: self.select_zone(-1), add="+")
         
         # Logo & Title Left
         title_frame = ctk.CTkFrame(header, fg_color="transparent")
         title_frame.pack(side="left")
         
-        # Icon Container (simplified - no image loading)
-        icon_container = ctk.CTkFrame(title_frame, width=50, height=50, corner_radius=25, 
-                                      fg_color="#222", border_width=2, border_color="#333")
-        icon_container.pack_propagate(False) 
-        icon_container.pack(side="left", padx=(0, 15))
-        
-        # Icon label (using emoji/unicode icon)
-        ctk.CTkLabel(icon_container, text="⚡", font=("Segoe UI", 28), 
-                    text_color=self.c_text, fg_color="transparent").place(relx=0.5, rely=0.5, anchor="center")
+        # Icon label (Directly placed, no frame)
+        self.logo_icon = ctk.CTkLabel(title_frame, text="", image=self.get_icon("bolt", "#ffffff", 32))
+        self.logo_icon.pack(side="left", padx=(0, 15))
         
         # Track for theme updating
         if not hasattr(self, "accent_frames"): self.accent_frames = []
-        icon_container.is_logo = True
-        self.accent_frames.append(icon_container)
         
         ctk.CTkLabel(title_frame, text="LEGION CONTROL", font=("Segoe UI", 28, "bold"), text_color=self.c_text).pack(side="left")
         
@@ -303,17 +322,28 @@ class LegionLightApp(ctk.CTk):
         ctk.CTkButton(theme_frame, text=device_name, width=150, height=32, fg_color="#2b2b2b", hover_color="#3a3a3a", 
                       corner_radius=8, font=("Segoe UI", 12, "bold"), command=self.show_system_info).pack(side="left", padx=(0, 25))
         
-        # Better Theme Toggle (Segmented style)
-        self.theme_seg = ctk.CTkSegmentedButton(theme_frame, values=["Miku", "Teto", "Neru"], variable=self.theme_var_str,
-                                                width=150,
-                                                selected_color=self.c_accent, selected_hover_color=self.c_accent,
-                                                unselected_color="#2b2b2b", unselected_hover_color="#3a3a3a")
-        self.theme_seg.pack(side="left")
+        # Custom Theme Toggle (Button Group for better contrast control)
+        self.theme_btn_frame = ctk.CTkFrame(theme_frame, fg_color="#2b2b2b", corner_radius=8)
+        self.theme_btn_frame.pack(side="left")
+        self.theme_btns = {}
+        for val in ["Miku", "Teto", "Neru"]:
+            btn = ctk.CTkButton(self.theme_btn_frame, text=val, width=50, height=28, 
+                                corner_radius=6, border_width=0, font=("Segoe UI", 11, "bold"),
+                                fg_color="transparent", text_color="#aaa",
+                                command=lambda v=val: self.theme_var_str.set(v)) # Trace handles toggle_theme_str
+            btn.pack(side="left", padx=2, pady=2)
+            self.theme_btns[val] = btn
+        
+        # Advanced Settings Button (Gear)
+        ctk.CTkButton(theme_frame, text="", image=self.get_icon("settings", "#ffffff", 18), 
+                      width=32, height=32, fg_color="#2b2b2b", hover_color="#3a3a3a", 
+                      corner_radius=8, command=self.show_ui_settings).pack(side="left", padx=(10, 0))
 
         # --- Footer (Packed Bottom) ---
         # Pack footer BEFORE content to ensure it sticks to the bottom and isn't pushed off by expandable content
         footer = ctk.CTkFrame(self.root_frame, fg_color="transparent")
         footer.pack(side="bottom", fill="x", padx=40, pady=30)
+        footer.bind("<Button-1>", lambda e: self.select_zone(-1), add="+")
         
         ctk.CTkCheckBox(footer, text="Live Preview", variable=self.live_preview_var, text_color=self.c_text_sec, font=("Segoe UI", 13), border_width=2).pack(side="left")
         
@@ -324,11 +354,13 @@ class LegionLightApp(ctk.CTk):
 
         # --- Content Area (Scrollable, Fills Remaining Space) ---
         content = ctk.CTkScrollableFrame(self.root_frame, fg_color="transparent", corner_radius=0)
-        content.pack(side="top", fill="both", expand=True, padx=20, pady=(0, 10))
+        content.pack(side="top", fill="both", expand=True, padx=20, pady=0)
+        content.bind("<Button-1>", lambda e: self.select_zone(-1), add="+")
         
         # Left Column: Profiles & Power
         left_col = ctk.CTkFrame(content, fg_color="transparent")
         left_col.pack(side="left", fill="both", expand=True, padx=(0, 20))
+        left_col.bind("<Button-1>", lambda e: self.select_zone(-1), add="+")
         
         # > Profile Section
         prof_content_frame = self.create_card(left_col, "PROFILES")
@@ -356,12 +388,56 @@ class LegionLightApp(ctk.CTk):
         # > Power Section
         power_content_frame = self.create_card(left_col, "BATTERY & POWER")
         
-        # Battery Status
-        self.battery_label = ctk.CTkLabel(power_content_frame, text=f"Battery: {self.get_battery_status()}", 
-                                         text_color=self.c_accent, font=("Segoe UI", 12, "bold"))
-        self.battery_label.pack(anchor="w", pady=(10,10))
+        # Battery Top Row (Percentage & Icon)
+        batt_top_row = ctk.CTkFrame(power_content_frame, fg_color="transparent")
+        batt_top_row.pack(fill="x", pady=(5, 5))
         
-        # Update battery status every 30 seconds
+        self.batt_icon_label = ctk.CTkLabel(batt_top_row, text="", image=self.get_icon("battery", "#ffffff", 24))
+        self.batt_icon_label.pack(side="left", padx=(0, 10))
+        
+        self.batt_perc_label = ctk.CTkLabel(batt_top_row, text="--%", font=("Segoe UI", 24, "bold"), text_color=self.c_text)
+        self.batt_perc_label.pack(side="left")
+        
+        # Current Charge Wh (now under percentage)
+        self.batt_charge_sub_label = ctk.CTkLabel(power_content_frame, text="Charge: -- / -- Wh", font=("Segoe UI", 11), text_color="#888")
+        self.batt_charge_sub_label.pack(anchor="w", padx=(34, 0), pady=(0, 10))
+        
+        # Battery Progress Bar
+        self.batt_bar = ctk.CTkProgressBar(power_content_frame, height=10, progress_color=self.c_accent, fg_color="#333")
+        self.batt_bar.pack(fill="x", pady=(5, 10))
+        self.batt_bar.set(0)
+        
+        # Battery Info Row (Status & Wattage) - Constrain width to look better on wide screens
+        batt_info_outer = ctk.CTkFrame(power_content_frame, fg_color="transparent")
+        batt_info_outer.pack(fill="x", pady=(5, 0))
+        
+        batt_info_row = ctk.CTkFrame(batt_info_outer, fg_color="transparent")
+        batt_info_row.pack(anchor="center", fill="x")
+        
+        self.batt_status_label = ctk.CTkLabel(batt_info_row, text="Status: --", font=("Segoe UI", 12), text_color=self.c_text_sec)
+        self.batt_status_label.pack(side="left")
+        
+        self.batt_wattage_label = ctk.CTkLabel(batt_info_row, text="0.0W", font=("Segoe UI", 13, "bold"), text_color=self.c_accent)
+        self.batt_wattage_label.pack(side="right")
+        
+        self.batt_time_label = ctk.CTkLabel(power_content_frame, text="", font=("Segoe UI", 11), text_color="#555")
+        self.batt_time_label.pack(anchor="w", pady=(2, 0))
+        
+        # Bottom "Health Meta" section
+        health_meta_row = ctk.CTkFrame(power_content_frame, fg_color="transparent")
+        health_meta_row.pack(fill="x", pady=(15, 0))
+        
+        self.batt_health_perc_label = ctk.CTkLabel(health_meta_row, text="Condition: --%", font=("Segoe UI", 12, "bold"))
+        self.batt_health_perc_label.pack(side="left")
+        
+        # Full Capacity Wh (now at bottom under condition)
+        self.batt_health_wh_label = ctk.CTkLabel(health_meta_row, text="-- / -- Wh", font=("Segoe UI", 11), text_color="#aaa")
+        self.batt_health_wh_label.pack(side="right")
+        
+        # Separator
+        ctk.CTkFrame(power_content_frame, height=1, fg_color="#222").pack(fill="x", pady=15)
+        
+        # Initial update call
         self.update_battery_status()
         
         if self.power_controller.has_conservation or self.power_controller.has_rapid:
@@ -374,120 +450,467 @@ class LegionLightApp(ctk.CTk):
             ctk.CTkOptionMenu(power_content_frame, variable=self.power_mode_var, values=modes, command=self.set_power_mode,
                               fg_color="#333", button_color="#222", corner_radius=6).pack(fill="x", pady=(0, 5))
             
-            ctk.CTkLabel(power_content_frame, text="Conservation ~60% or 80% Limit (model dependent). Rapid = Fast Charge. Normal Mode = Standard.", font=("Segoe UI", 11), text_color="#555", wraplength=300).pack(anchor="w", pady=(5,0))
-            
-            if not self.power_controller.has_rapid:
-                 ctk.CTkLabel(power_content_frame, text="Note: Rapid Charge may be missing due to kernel/firmware limitations on Linux.", font=("Segoe UI", 10), text_color="#444", wraplength=300).pack(anchor="w", pady=(5,0))
-
+            ctk.CTkLabel(power_content_frame, text="Conservation ~60-80% limit. Rapid = Fast Charge.", font=("Segoe UI", 11), text_color="#555").pack(anchor="w", pady=(5,0))
         else:
              ctk.CTkLabel(power_content_frame, text="Power management not available.", text_color="#555").pack()
 
         # Right Column: Lighting & Colors (Merged)
         right_col = ctk.CTkFrame(content, fg_color="transparent")
         right_col.pack(side="right", fill="both", expand=True)
+        # Bind background of right column to deselect
+        right_col.bind("<Button-1>", lambda e: self.select_zone(-1), add="+")
         
         light_content_frame = self.create_card(right_col, "LIGHTING & COLOR")
+        light_content_frame.bind("<Button-1>", lambda e: self.select_zone(-1), add="+")
         
         # -- Lighting Controls --
-        ctk.CTkLabel(light_content_frame, text="Effect Mode", text_color=self.c_text_sec, font=("Segoe UI", 13)).pack(anchor="w", pady=(10,5))
-        ctk.CTkOptionMenu(light_content_frame, variable=self.effect_var, values=["static","breath","wave","hue","off"], 
+        # Effect Mode Dropdown (Hardware + Software effects)
+        effects = ["static","breath","wave","hue","off", "Police", "Scanner", "Heartbeat", "Fire", "Battery", "Soft Wave"]
+        ctk.CTkOptionMenu(light_content_frame, variable=self.effect_var, values=effects, 
                           command=self.on_setting_changed, fg_color="#333", button_color="#222", corner_radius=6).pack(fill="x", pady=(0, 15))
         
-        # Brightness & Speed Row
-        self.row_bs = ctk.CTkFrame(light_content_frame, fg_color="transparent")
-        self.row_bs.pack(fill="x", pady=5)
+        # Control Bar: Brightness & Animation Speed (Segmented style)
+        self.control_bar_frame = ctk.CTkFrame(light_content_frame, fg_color="transparent")
+        self.control_bar_frame.pack(fill="x", pady=(0, 15))
         
-        # Brightness
-        b_frame = ctk.CTkFrame(self.row_bs, fg_color="transparent")
-        b_frame.pack(side="left", fill="x", expand=True, padx=(0,10))
-        ctk.CTkLabel(b_frame, text="Brightness", text_color=self.c_text_sec, font=("Segoe UI", 13)).pack(anchor="w", pady=(0,5))
+        # Brightness Section
+        b_frame = ctk.CTkFrame(self.control_bar_frame, fg_color="transparent")
+        b_frame.pack(side="left", fill="x", expand=True)
+        ctk.CTkLabel(b_frame, text="Brightness", text_color=self.c_text_sec, font=("Segoe UI", 12, "bold")).pack(anchor="w")
         
-        b_btns = ctk.CTkFrame(b_frame, fg_color="transparent")
-        b_btns.pack(fill="x")
-        self.btn_off = ctk.CTkButton(b_btns, text="OFF", width=50, height=30, fg_color="#333", corner_radius=6, border_width=1, border_color="#333", hover_color="#444", command=lambda: [self.effect_var.set("off"), self.on_setting_changed()])
-        self.btn_off.pack(side="left", padx=(0,5))
-        self.btn_low = ctk.CTkButton(b_btns, text="LOW", width=50, height=30, fg_color="#333", corner_radius=6, border_width=1, border_color="#333", hover_color="#444", command=lambda: [self.brightness_var.set("Low"), self.on_setting_changed()])
-        self.btn_low.pack(side="left", padx=5)
-        self.btn_high = ctk.CTkButton(b_btns, text="HIGH", width=50, height=30, fg_color="#333", corner_radius=6, border_width=1, border_color="#333", hover_color="#444", command=lambda: [self.brightness_var.set("High"), self.on_setting_changed()])
-        self.btn_high.pack(side="left", padx=5)
-
-        # Speed
-        s_frame = ctk.CTkFrame(self.row_bs, fg_color="transparent")
-        s_frame.pack(side="right", fill="x", expand=True, padx=(10,0))
-        ctk.CTkLabel(s_frame, text="Animation Speed", text_color=self.c_text_sec, font=("Segoe UI", 13)).pack(anchor="w", pady=(0,5))
+        # Brightness Group
+        self.bright_btn_frame = ctk.CTkFrame(b_frame, fg_color="#222", corner_radius=6)
+        self.bright_btn_frame.pack(anchor="w", pady=(2, 0))
+        self.bright_btns = {}
+        for val in ["OFF", "LOW", "HIGH"]:
+            btn = ctk.CTkButton(self.bright_btn_frame, text=val, width=55, height=28, 
+                                corner_radius=4, border_width=0, font=("Segoe UI", 10, "bold"),
+                                fg_color="transparent", text_color="#aaa",
+                                command=lambda v=val: self._on_bright_seg_click(v))
+            btn.pack(side="left", padx=1, pady=1)
+            self.bright_btns[val] = btn
         
-        s_btns = ctk.CTkFrame(s_frame, fg_color="transparent")
-        s_btns.pack(fill="x")
-        self.speed_btns = []
-        for i in range(1, 5):
-             btn = ctk.CTkButton(s_btns, text=str(i), width=40, height=30, fg_color="#333", corner_radius=6, border_width=1, border_color="#333", hover_color="#444", 
-                                 command=lambda s=i: [self.speed_var.set(s), self.on_setting_changed()])
-             btn.pack(side="left", padx=2)
-             self.speed_btns.append(btn)
-
+        # Speed Section
+        s_frame = ctk.CTkFrame(self.control_bar_frame, fg_color="transparent")
+        s_frame.pack(side="right", fill="x", expand=True)
+        ctk.CTkLabel(s_frame, text="Animation Speed", text_color=self.c_text_sec, font=("Segoe UI", 12, "bold")).pack(anchor="e")
+        
+        self.speed_btn_frame = ctk.CTkFrame(s_frame, fg_color="#222", corner_radius=6)
+        self.speed_btn_frame.pack(anchor="e", pady=(2, 0))
+        self.speed_btns_list = []
+        for val in ["1", "2", "3", "4"]:
+            btn = ctk.CTkButton(self.speed_btn_frame, text=val, width=42, height=28, 
+                                corner_radius=4, border_width=0, font=("Segoe UI", 10, "bold"),
+                                fg_color="transparent", text_color="#aaa",
+                                command=lambda v=val: [self.speed_var.set(int(v)), self.on_setting_changed()])
+            btn.pack(side="left", padx=1, pady=1)
+            self.speed_btns_list.append(btn)
         # Wave Direction
         self.wave_frame = ctk.CTkFrame(light_content_frame, fg_color="transparent")
         ctk.CTkLabel(self.wave_frame, text="Wave Direction", text_color=self.c_text_sec, font=("Segoe UI", 13)).pack(anchor="w", pady=(15,5))
-        self.wave_seg = ctk.CTkSegmentedButton(self.wave_frame, values=["LTR", "RTL"], variable=self.wave_direction_var, 
-                               command=self.on_setting_changed, selected_color=self.c_accent, corner_radius=6)
-        self.wave_seg.pack(fill="x")
+        # Wave Direction Group
+        self.wave_btn_frame = ctk.CTkFrame(self.wave_frame, fg_color="#222", corner_radius=6)
+        self.wave_btn_frame.pack(fill="x", padx=1, pady=1)
+        self.wave_btns = {}
+        for val in ["LTR", "RTL"]:
+            btn = ctk.CTkButton(self.wave_btn_frame, text=val, height=28, 
+                                corner_radius=4, border_width=0, font=("Segoe UI", 10, "bold"),
+                                fg_color="transparent", text_color="#aaa",
+                                command=lambda v=val: [self.wave_direction_var.set(v), self.on_setting_changed()])
+            btn.pack(side="left", fill="x", expand=True, padx=1, pady=1)
+            self.wave_btns[val] = btn
 
-        # Separator between Lighting controls and Colors
-        ctk.CTkFrame(light_content_frame, height=1, fg_color="#333").pack(fill="x", pady=25)
+        # -- Keyboard Preview (Large & Clickable) --
+        self.kb_preview_label = ctk.CTkLabel(light_content_frame, text="")
+        self.kb_preview_label.pack(anchor="center", pady=(0, 5))
+        self.kb_preview_label.bind("<Button-1>", self.on_preview_click)
+        # -- Zone Power Toggles (Large & Centered) --
+        power_row = ctk.CTkFrame(light_content_frame, fg_color="transparent")
+        power_row.pack(anchor="center", pady=(0, 15))
+        power_row.bind("<Button-1>", lambda e: self.select_zone(-1)) # Click background to deselect
 
-        # -- Color Controls --
-        
-        # Tools Row
-        # Gradient Generator
-        grad_btn = ctk.CTkButton(light_content_frame, text="GENERATE GRADIENT", height=28, fg_color="#333", corner_radius=6, hover_color="#444", 
-                      font=("Segoe UI", 11, "bold"), command=self.generate_gradient)
-        grad_btn.pack(anchor="e", pady=(0,15))
-        ToolTip(grad_btn, "Calculates a smooth transition between Zone 1 and Zone 4 colors")
-        
-        # Color Grid
-        c_grid = ctk.CTkFrame(light_content_frame, fg_color="transparent")
-        c_grid.pack(fill="x")
-        c_grid.grid_columnconfigure((0,1,2,3), weight=1) # Even spacing
-        
-        self.color_swatches = []
+        self.zone_power_btns = []
         for i in range(4):
-            f = ctk.CTkFrame(c_grid, fg_color="transparent")
-            f.grid(row=0, column=i)
-            ctk.CTkLabel(f, text=f"ZONE {i+1}", font=("Segoe UI", 11, "bold"), text_color="#777").pack(pady=(0,5))
-            
-            # Swatch
-            btn = ctk.CTkButton(f, text="", width=55, height=55, corner_radius=27, fg_color="#" + self.color_vars[i].get(),
-                                border_width=2, border_color="#333", command=lambda i=i: self.open_color_wheel(i))
-            btn.pack(pady=5)
-            self.color_swatches.append(btn)
-            
-            # Hex entry
-            e = ctk.CTkEntry(f, textvariable=self.color_vars[i], width=65, height=25, font=("Consolas", 11), justify="center", 
-                             fg_color="#1a1a1a", border_width=1, border_color="#333", corner_radius=12)
-            e.pack(pady=5)
+            btn = ctk.CTkButton(power_row, text="", image=self.get_icon("power", "#ffffff", 14),
+                                 width=50, height=34, corner_radius=17, 
+                                 fg_color="#222", hover_color="#333",
+                                 command=lambda idx=i: self.select_zone(idx) or self.toggle_zone_power(idx))
+            btn.pack(side="left", padx=38) # Restored spacing for 500px centered zones
+            ToolTip(btn, f"Zone {i+1} Power")
+            self.zone_power_btns.append(btn)
+
+
+        # -- Integrated Color Panel --
+        self.picker_frame = ctk.CTkFrame(light_content_frame, fg_color="#1a1a1a", corner_radius=10, border_width=1, border_color="#222")
+        self.picker_frame.pack(fill="x", pady=10, padx=5)
+        # Clicking inside the picker frame background should NOT deselect
+        # Actually, user said "excluding the color selectors", so clicking blank space in picker might still deselect?
+        # Usually it's better if the Picker acts as a safe zone.
+        # But if the user wants "anywhere outside of the zones", let's make picker background neutral
+        # We won't bind it for now to see if the main frame is enough.
+        
+        # Upper Picking Area (Fixed Size & Centered)
+        picking_container = ctk.CTkFrame(self.picker_frame, fg_color="transparent", width=390, height=180)
+        picking_container.pack(anchor="center", pady=(15, 5))
+        picking_container.pack_propagate(False)
+        
+        # SV Canvas (Fixed width) - No padding labels
+        self.sv_canvas = ctk.CTkLabel(picking_container, text="", width=350, height=180, fg_color="#000", corner_radius=0)
+        self.sv_canvas.pack(side="left", fill="both")
+        self.sv_canvas.bind("<B1-Motion>", self.on_canvas_drag)
+        self.sv_canvas.bind("<Button-1>", self.on_canvas_drag)
+        
+        # Hue Bar
+        self.hue_canvas = ctk.CTkLabel(picking_container, text="", width=30, height=180, fg_color="#000", corner_radius=0)
+        self.hue_canvas.pack(side="left", padx=(10, 0), fill="both")
+        self.hue_canvas.bind("<B1-Motion>", self.on_hue_drag)
+        self.hue_canvas.bind("<Button-1>", self.on_hue_drag)
+        
+        # Lower Entry Area (Numeric + Hex) - Centered
+        entry_area = ctk.CTkFrame(self.picker_frame, fg_color="transparent")
+        entry_area.pack(fill="x", padx=15, pady=(0, 10))
+        
+        # Inner centering frame
+        entry_inner = ctk.CTkFrame(entry_area, fg_color="transparent")
+        entry_inner.pack(anchor="center")
+        
+        # Hex
+        hex_f = ctk.CTkFrame(entry_inner, fg_color="transparent")
+        hex_f.pack(side="left", padx=(0, 15))
+        ctk.CTkLabel(hex_f, text="HEX", font=("Segoe UI", 10, "bold"), text_color="#555").pack()
+        self.hex_entry = ctk.CTkEntry(hex_f, width=80, height=28, font=("Consolas", 12), justify="center", border_width=1)
+        self.hex_entry.pack()
+        self.hex_entry.bind("<Return>", self.on_hex_entered)
+        
+        # RGB Entries
+        self.rgb_entries = []
+        for i, (label, col) in enumerate([("R", "#ff4444"), ("G", "#44ff44"), ("B", "#4444ff")]):
+             f = ctk.CTkFrame(entry_inner, fg_color="transparent")
+             f.pack(side="left", padx=5)
+             ctk.CTkLabel(f, text=label, font=("Segoe UI", 10, "bold"), text_color=col).pack()
+             e = ctk.CTkEntry(f, width=45, height=28, font=("Consolas", 12), justify="center", border_width=1)
+             e.pack()
+             e.bind("<Return>", self.on_rgb_entered)
+             self.rgb_entries.append(e)
+
+        # Palette & Gradient Row
+        palette_area = ctk.CTkFrame(self.picker_frame, fg_color="transparent")
+        palette_area.pack(fill="x", padx=15, pady=(0, 15))
+        
+        # 3-Column Layout: [Presets] [Gradient] [Recents]
+        palette_split = ctk.CTkFrame(palette_area, fg_color="transparent")
+        palette_split.pack(fill="x")
+        palette_split.grid_columnconfigure(1, weight=1) # Center the button column
+        
+        # Left: Presets
+        prest_col = ctk.CTkFrame(palette_split, fg_color="transparent")
+        prest_col.grid(row=0, column=0, sticky="nw")
+        ctk.CTkLabel(prest_col, text="PRESETS", font=("Segoe UI", 10, "bold"), text_color=self.c_text_sec).pack(anchor="w")
+        
+        preset_grid = ctk.CTkFrame(prest_col, fg_color="transparent")
+        preset_grid.pack(anchor="w")
+        
+        self.vocaloid_presets = ["#39c5bb", "#d03a58", "#e4d935", "#7dbf3b"]
+        for i, p_col in enumerate(self.vocaloid_presets):
+             btn = ctk.CTkButton(preset_grid, text="", width=22, height=22, corner_radius=11, 
+                                 fg_color=p_col, hover_color=p_col,
+                                 command=lambda c=p_col: self.apply_preset(c))
+             btn.grid(row=i//2, column=i%2, padx=2, pady=2)
+
+        # Center: Gradient Button
+        grad_col = ctk.CTkFrame(palette_split, fg_color="transparent")
+        grad_col.grid(row=0, column=1, sticky="n")
+        
+        self.grad_mini_btn = ctk.CTkButton(grad_col, text="GRADIENT Z1 → Z4", height=28, width=120,
+                                           fg_color="#222", hover_color="#333", border_width=1, border_color="#333",
+                                           font=("Segoe UI", 9, "bold"), corner_radius=6,
+                                           command=self.generate_gradient)
+        self.grad_mini_btn.pack(pady=(5, 2))
+        
+        self.save_hist_btn = ctk.CTkButton(grad_col, text="SAVE TO RECENT", height=28, width=120,
+                                           fg_color="#222", hover_color="#333", border_width=1, border_color="#333",
+                                           font=("Segoe UI", 9, "bold"), corner_radius=6,
+                                           command=lambda: self.add_to_history(self.color_vars[self.selected_zone].get()))
+        self.save_hist_btn.pack(pady=2)
+
+        # Right: Recent Colors (4x3 Grid)
+        hist_col = ctk.CTkFrame(palette_split, fg_color="transparent")
+        hist_col.grid(row=0, column=2, sticky="ne")
+        ctk.CTkLabel(hist_col, text="RECENT COLORS", font=("Segoe UI", 10, "bold"), text_color=self.c_text_sec).pack(anchor="w")
+        
+        self.history_grid = ctk.CTkFrame(hist_col, fg_color="transparent")
+        self.history_grid.pack(anchor="w")
+        
+        self.history_swatches = []
+        for i in range(12):
+             btn = ctk.CTkButton(self.history_grid, text="", width=22, height=22, corner_radius=5, 
+                                 fg_color="#333", hover_color="#444", border_width=1, border_color="#222")
+             btn.grid(row=i//4, column=i%4, padx=2, pady=2)
+             self.history_swatches.append(btn)
+        self.update_history_ui()
+        
+        # Picker State
+        self.current_hue = 180 # 0-360
+        self.current_sv = (100, 100) # 0-100
+        
+        self.render_picker_canvases()
     
-    
-    def get_battery_status(self):
-        """Get current battery percentage and charging status"""
+    def get_icon(self, name, color, size=24):
+        """Generate a sharp PNG icon using PIL and return as CTkImage"""
+        img = Image.new("RGBA", (size*2, size*2), (0,0,0,0)) # 2x for supersampling
+        draw = ImageDraw.Draw(img)
+        
+        if name == "bolt":
+            # Points for a lightning bolt
+            points = [(size*1.2, size*0.2), (size*0.4, size*1.1), (size*1.0, size*1.1), 
+                      (size*0.8, size*1.8), (size*1.6, size*0.9), (size*1.0, size*0.9)]
+            draw.polygon(points, fill=color)
+        elif name == "bolt_glow":
+            points = [(size*1.2, size*0.2), (size*0.4, size*1.1), (size*1.0, size*1.1), 
+                      (size*0.8, size*1.8), (size*1.6, size*0.9), (size*1.0, size*0.9)]
+            # Draw a soft glow by layering slightly transparent versions
+            glow_col = color + "44" if len(color)==7 else color # Basic alpha if hex
+            if color == "#ffffff": glow_col = "rgba(255,255,255,80)"
+            
+            # Simple glow using multiple outlines
+            for i in range(3, 0, -1):
+                draw.polygon(points, outline=color, width=i*2)
+            draw.polygon(points, fill=color)
+        elif name == "battery":
+            # Battery body
+            draw.rounded_rectangle([size*0.4, size*0.6, size*1.6, size*1.4], radius=4, outline=color, width=4)
+            # Battery tip
+            draw.rectangle([size*1.6, size*0.8, size*1.75, size*1.2], fill=color)
+            # Fill level (just a placeholder, real one in update_battery)
+            draw.rectangle([size*0.55, size*0.75, size*1.45, size*1.25], fill=color)
+        elif name == "battery_low":
+            draw.rounded_rectangle([size*0.4, size*0.6, size*1.6, size*1.4], radius=4, outline="#ff4444", width=4)
+            draw.rectangle([size*1.6, size*0.8, size*1.75, size*1.2], fill="#ff4444")
+            draw.rectangle([size*0.55, size*0.75, size*0.8, size*1.25], fill="#ff4444")
+        elif name == "settings":
+            # Gear icon
+            draw.ellipse([size*0.6, size*0.6, size*1.4, size*1.4], outline=color, width=4)
+            import math
+            for i in range(8):
+                angle = i * 45
+                rad = math.radians(angle)
+                x1 = size + math.cos(rad) * size * 0.4
+                y1 = size + math.sin(rad) * size * 0.4
+                x2 = size + math.cos(rad) * size * 0.8
+                y2 = size + math.sin(rad) * size * 0.8
+                draw.line([x1, y1, x2, y2], fill=color, width=4)
+        elif name == "deselect":
+            # Simple X icon
+            pad = size * 0.5
+            draw.line([pad, pad, size*2-pad, size*2-pad], fill=color, width=4)
+            draw.line([size*2-pad, pad, pad, size*2-pad], fill=color, width=4)
+            
+        return ctk.CTkImage(light_image=img, dark_image=img, size=(size, size))
+
+    def update_keyboard_preview(self):
+        """Draw a visual representation of the 4-zone lighting with large fixed size"""
+        if not hasattr(self, 'kb_preview_label'):
+            return
+            
+        w, h = 500, 150
+        
+        # Create a higher resolution image for smoothness
+        canvas_w, canvas_h = w * 2, h * 2
+        img = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        
+        # Determine if lights are "off"
+        is_off = self.effect_var.get() == "off"
+        
+        # Colors for the 4 zones
+        colors = []
+        effect = self.effect_var.get()
+        is_sw = effect in ["Police", "Scanner", "Heartbeat", "Fire", "Battery", "Soft Wave"]
+        
+        for i in range(4):
+            if is_sw:
+                hex_c = self.sw_active_colors[i]
+            else:
+                hex_c = self.color_vars[i].get()
+                
+            if is_off or hex_c == "000000":
+                colors.append((25, 25, 25, 255)) # Darker if off
+            else:
+                rgb = self.hex_to_rgb(hex_c)
+                colors.append(rgb + (255,))
+        
+        # Draw the keyboard body
+        body_padding = 10
+        draw.rounded_rectangle([body_padding, body_padding, canvas_w - body_padding, canvas_h - body_padding], 
+                                radius=20, fill=(30, 30, 30, 255), outline=(60, 60, 60, 255), width=4)
+        
+        # Draw the 4 lighting zones
+        zone_w = (canvas_w - (body_padding * 4)) // 4
+        zone_h = canvas_h - (body_padding * 6)
+        zone_start_y = body_padding * 3
+        
+        for i in range(4):
+            x1 = (body_padding * 2) + (i * zone_w)
+            y1 = zone_start_y
+            x2 = x1 + zone_w - 5
+            y2 = y1 + zone_h
+            
+            # Glow effect (soft rectangle)
+            glow_c = colors[i][:3] + (80,) # Transparent version
+            draw.rounded_rectangle([x1-2, y1-2, x2+2, y2+2], radius=10, fill=glow_c)
+            
+            # Main key area color
+            if self.pref_solo_mode.get() and self.selected_zone != -1 and i != self.selected_zone:
+                 fill_col = (20, 20, 20, 255) # Darken others in Solo mode
+            else:
+                 fill_col = colors[i]
+            draw.rounded_rectangle([x1, y1, x2, y2], radius=8, fill=fill_col)
+            
+            # Add Selection Highlight (Blinking/Breathing)
+            if i == self.selected_zone:
+                # Determine display color for cursor
+                disp_col = self.c_accent
+                if self.pref_blink_opposite.get() and not self.blink_active:
+                     # In inverted mode, the "off" phase highlight is white or black
+                     disp_col = "#ffffff"
+                
+                # If blink is active, draw a thicker, brighter ring
+                if self.blink_active:
+                    draw.rounded_rectangle([x1-5, y1-5, x2+5, y2+5], radius=11, outline=disp_col, width=5)
+                else:
+                    # If blink is "off", draw a subtle, thinner ring
+                    draw.rounded_rectangle([x1-3, y1-3, x2+3, y2+3], radius=9, outline=disp_col, width=2)
+            
+            # Add simple key highlights (to look like keys)
+            key_pad = 10
+            draw.line([x1 + key_pad, y1 + 30, x2 - key_pad, y1 + 30], fill=(255, 255, 255, 40), width=2)
+            draw.line([x1 + key_pad, y1 + 60, x2 - key_pad, y1 + 60], fill=(255, 255, 255, 40), width=2)
+            draw.line([x1 + key_pad, y1 + 90, x2 - key_pad, y1 + 90], fill=(255, 255, 255, 40), width=2)
+
+        # Convert to CTkImage
+        ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=(w, h))
+        if hasattr(self, "kb_preview_label"):
+            self.kb_preview_label.configure(image=ctk_img)
+
+    def get_battery_status_data(self):
+        """Get detailed battery data as a dictionary"""
+        data = {
+            "capacity": 0,
+            "status": "Unknown",
+            "wattage": 0.0,
+            "time_str": "",
+            "icon": "🔋"
+        }
         try:
-            # Read battery capacity
-            capacity_path = "/sys/class/power_supply/BAT0/capacity"
-            status_path = "/sys/class/power_supply/BAT0/status"
+            base = "/sys/class/power_supply/BAT0/"
             
-            if os.path.exists(capacity_path):
-                with open(capacity_path, 'r') as f:
-                    capacity = f.read().strip()
+            # Capacity
+            if os.path.exists(base + "capacity"):
+                with open(base + "capacity", 'r') as f:
+                    data["capacity"] = int(f.read().strip())
+            
+            # Energy Values (Wh)
+            e_now = 0
+            e_full = 0
+            e_design = 0
+            
+            if os.path.exists(base + "energy_now"):
+                with open(base + "energy_now", 'r') as f: e_now = int(f.read().strip())
+            if os.path.exists(base + "energy_full"):
+                with open(base + "energy_full", 'r') as f: e_full = int(f.read().strip())
+            if os.path.exists(base + "energy_full_design"):
+                with open(base + "energy_full_design", 'r') as f: e_design = int(f.read().strip())
                 
-                status = "Unknown"
-                if os.path.exists(status_path):
-                    with open(status_path, 'r') as f:
-                        status = f.read().strip()
+            data["energy_now_wh"] = e_now / 1000000.0
+            data["energy_full_wh"] = e_full / 1000000.0
+            data["energy_design_wh"] = e_design / 1000000.0
+            
+            if e_design > 0:
+                data["health"] = (e_full / e_design) * 100
+            else:
+                data["health"] = 0
+            
+            # Status
+            if os.path.exists(base + "status"):
+                with open(base + "status", 'r') as f:
+                    data["status"] = f.read().strip()
+            
+            # Power / Wattage
+            power_val = 0
+            if os.path.exists(base + "power_now"):
+                with open(base + "power_now", 'r') as f:
+                    power_val = int(f.read().strip())
+                    data["wattage"] = power_val / 1000000.0
+            
+            # Time Remaining Calculation
+            if data["wattage"] > 0.1:
+                energy_now = int(data["energy_now_wh"] * 1000000)
+                energy_full = int(data["energy_full_wh"] * 1000000)
+                power_val = int(data["wattage"] * 1000000)
                 
-                return f"{capacity}% ({status})"
-            return "N/A"
+                if data["status"] == "Discharging":
+                    hours = energy_now / power_val
+                    h = int(hours)
+                    m = int((hours - h) * 60)
+                    data["time_str"] = f"Est: {h}h {m}m remaining"
+                elif data["status"] == "Charging":
+                    remaining_to_charge = energy_full - energy_now
+                    if remaining_to_charge > 0:
+                        hours = remaining_to_charge / power_val
+                        h = int(hours)
+                        m = int((hours - h) * 60)
+                        data["time_str"] = f"Est: {h}h {m}m until full"
+
+            # Icon logic
+            if data["status"] == "Charging": data["icon"] = "⚡"
+            elif data["capacity"] < 20: data["icon"] = "🪫"
+            
+            return data
         except:
-            return "N/A"
-    
+            return data
+
+    def update_battery_status(self):
+        """Update battery UI elements with fresh data every second"""
+        data = self.get_battery_status_data()
+        
+        if hasattr(self, 'batt_perc_label'):
+            self.batt_perc_label.configure(text=f"{data['capacity']}%")
+            self.batt_bar.set(data['capacity'] / 100.0)
+            self.batt_status_label.configure(text=f"Status: {data['status']}")
+            self.batt_time_label.configure(text=data["time_str"])
+            
+            # Update Icon (Pure white, no theme sync)
+            icon_name = "bolt" if data['status'] == "Charging" else "battery"
+            self.batt_icon_label.configure(image=self.get_icon(icon_name, "#ffffff", 24))
+            
+            # Health & Capacity Labels
+            if "health" in data:
+                health_color = self.c_accent if data["health"] > 80 else "#ffcc00" if data["health"] > 60 else "#ff4444"
+                
+                # Update Charge (Current / Full Capacity) - Now at top
+                self.batt_charge_sub_label.configure(text=f"Charge: {data['energy_now_wh']:.1f} / {data['energy_full_wh']:.1f} Wh")
+                
+                # Update Health (Full Capacity / Original Design) - Now at bottom
+                self.batt_health_perc_label.configure(text=f"Battery Condition: {data['health']:.1f}%", text_color=health_color)
+                self.batt_health_wh_label.configure(text=f"{data['energy_full_wh']:.1f} / {data['energy_design_wh']:.1f} Wh")
+            
+            # Update Keyboard Preview
+            self.update_keyboard_preview()
+            
+            # Wattage formatting
+            w = data['wattage']
+            prefix = "+" if data['status'] == "Charging" else "-" if data['status'] == "Discharging" else ""
+            self.batt_wattage_label.configure(text=f"{prefix}{w:.1f}W")
+            
+            # Visual warnings
+            if data['status'] == "Discharging" and data['capacity'] <= 15:
+                self.batt_perc_label.configure(text_color="#ff4444")
+            else:
+                self.batt_perc_label.configure(text_color=self.c_text)
+
+        # Schedule next update in 1 second
+        self.after(1000, self.update_battery_status)
+
     def export_profile(self):
         """Export current profile to a JSON file"""
         from tkinter import filedialog
@@ -531,16 +954,7 @@ class LegionLightApp(ctk.CTk):
     def fade_in_animation(self, widget, duration=200):
         """Smooth fade-in animation for widgets"""
         # CustomTkinter doesn't support opacity animation directly
-        # But we can simulate it with a quick scale effect
         pass
-    
-    def update_battery_status(self):
-        """Update battery status label periodically"""
-        if hasattr(self, 'battery_label'):
-            status = self.get_battery_status()
-            self.battery_label.configure(text=f"Battery: {status}")
-        # Schedule next update in 30 seconds
-        self.after(30000, self.update_battery_status)
     
     def _finish_loading(self):
         """Mark that initial loading is complete, allow saves"""
@@ -746,13 +1160,20 @@ class LegionLightApp(ctk.CTk):
         top.geometry(f"+{x}+{y}")
         
         top.transient(self) 
-        # Non-blocking focus: try to grab focus without wait_visibility if possible
-        try:
-            top.grab_set()
-            top.focus_set()
-        except:
-            # Fallback for some window managers: try again in 10ms
-            self.after(10, lambda: [top.grab_set() if top.winfo_exists() else None])
+        
+        def safe_grab():
+            try:
+                if top.winfo_exists():
+                    if top.winfo_viewable():
+                        top.grab_set()
+                        top.focus_set()
+                    else:
+                        self.after(100, safe_grab)
+            except:
+                pass
+
+        # Start the safe grab process
+        self.after(50, safe_grab)
         
         # Header
         ctk.CTkLabel(top, text="SYSTEM INFORMATION", font=("Segoe UI", 16, "bold"), text_color=self.c_text).pack(pady=(20, 10))
@@ -794,6 +1215,44 @@ class LegionLightApp(ctk.CTk):
         ctk.CTkButton(top, text="CLOSE", width=120, height=32, fg_color="#333", hover_color="#444", 
                       command=top.destroy, corner_radius=6).pack(pady=20)
 
+    def show_ui_settings(self):
+        """Show advanced UI interaction settings popup"""
+        top = ctk.CTkToplevel(self)
+        top.title("Control Settings")
+        top.geometry("450x400")
+        top.attributes("-topmost", True)
+        top.configure(fg_color=self.c_bg)
+        
+        # Center popup
+        x = self.winfo_x() + (self.winfo_width() // 2) - 225
+        y = self.winfo_y() + (self.winfo_height() // 2) - 200
+        top.geometry(f"+{x}+{y}")
+        top.transient(self)
+        
+        ctk.CTkLabel(top, text="ADVANCED FEEDBACK", font=("Segoe UI", 16, "bold"), text_color=self.c_text).pack(pady=(20, 20))
+        
+        container = ctk.CTkFrame(top, fg_color="transparent")
+        container.pack(fill="both", expand=True, padx=40)
+        
+        # Toggle 1: Opposite Color Blink
+        f1 = ctk.CTkFrame(container, fg_color="transparent")
+        f1.pack(fill="x", pady=10)
+        ctk.CTkLabel(f1, text="Opposite Color Pulse", font=("Segoe UI", 13), text_color="#ccc").pack(side="left")
+        ctk.CTkSwitch(f1, text="", variable=self.pref_blink_opposite, width=40,
+                      command=self.save_settings).pack(side="right")
+        ctk.CTkLabel(top, text="Flips the zone color during pulse (High Visibility)", font=("Segoe UI", 10), text_color="#555").pack(pady=(0, 10))
+
+        # Toggle 2: Solo Focus Mode
+        f2 = ctk.CTkFrame(container, fg_color="transparent")
+        f2.pack(fill="x", pady=10)
+        ctk.CTkLabel(f2, text="Solo Focus Mode", font=("Segoe UI", 13), text_color="#ccc").pack(side="left")
+        ctk.CTkSwitch(f2, text="", variable=self.pref_solo_mode, width=40,
+                      command=self.save_settings).pack(side="right")
+        ctk.CTkLabel(top, text="Darkens other zones when picking colors", font=("Segoe UI", 10), text_color="#555").pack(pady=(0, 20))
+
+        ctk.CTkButton(top, text="CLOSE", width=120, height=32, fg_color="#333", hover_color="#444", 
+                      command=top.destroy, corner_radius=6).pack(pady=20)
+
     def refresh_sys_info_ui(self):
         """Update existing labels or create them if missing (much faster than destroying)"""
         if not hasattr(self, 'sys_popup') or not self.sys_popup.winfo_exists():
@@ -820,7 +1279,7 @@ class LegionLightApp(ctk.CTk):
     def create_card(self, parent, title):
         # Slightly darker card, lighter text
         card = ctk.CTkFrame(parent, fg_color=self.c_card, corner_radius=self.corner_rad, border_width=1, border_color="#262626")
-        card.pack(fill="x", pady=(0, 20))
+        card.pack(fill="x", pady=(0, 15))
         
         # Colored accent line at top
         accent = ctk.CTkFrame(card, height=3, fg_color=self.c_accent, corner_radius=0)
@@ -833,11 +1292,11 @@ class LegionLightApp(ctk.CTk):
         self.accent_frames.append(accent)
         
         # Title with padding
-        ctk.CTkLabel(card, text=title, font=("Segoe UI", 12, "bold"), text_color="#666").pack(anchor="w", padx=25, pady=(20, 5))
+        ctk.CTkLabel(card, text=title, font=("Segoe UI", 12, "bold"), text_color="#666").pack(anchor="w", padx=25, pady=(12, 5))
         
         # Content frame (returned to be used as parent for widgets)
         content = ctk.CTkFrame(card, fg_color="transparent")
-        content.pack(fill="both", expand=True, padx=25, pady=(0, 25))
+        content.pack(fill="both", expand=True, padx=25, pady=(0, 15))
         
         return content
 
@@ -847,19 +1306,22 @@ class LegionLightApp(ctk.CTk):
         if val == "Teto":
             self.c_accent = "#d03a58" # Red/Pink
         elif val == "Neru":
-             self.c_accent = "#e4d935" # Yellow
+             self.c_accent = "#c9b800" # Gold
         else: # Miku
             self.c_accent = "#39c5bb" # Teal
             
+        # Determine best text color for contrast on selected light colors (Miku/Neru)
+        self.sel_txt_col = "#000000" if val in ["Miku", "Neru"] else "#ffffff"
+            
         # Update active UI elements if they exist
         if hasattr(self, "apply_btn"):
-            self.apply_btn.configure(fg_color=self.c_accent)
+            self.apply_btn.configure(fg_color=self.c_accent, text_color=self.sel_txt_col)
             
-        if hasattr(self, "wave_seg"): 
-            self.wave_seg.configure(selected_color=self.c_accent)
-            
-        if hasattr(self, "theme_seg"): 
-             self.theme_seg.configure(selected_color=self.c_accent, selected_hover_color=self.c_accent)
+        if hasattr(self, "logo_icon"):
+            self.logo_icon.configure(image=self.get_icon("bolt", "#ffffff", 32))
+
+        # Re-run control UI update to apply specific Colors to Custom Groups
+        self.update_control_ui()
              
         # Update cached accent frames
         if hasattr(self, "accent_frames"):
@@ -872,41 +1334,82 @@ class LegionLightApp(ctk.CTk):
                 except: pass
         
         # Update battery label color
-        if hasattr(self, 'battery_label'):
-            self.battery_label.configure(text_color=self.c_accent)
+        if hasattr(self, 'batt_bar'):
+             self.batt_bar.configure(progress_color=self.c_accent)
+        if hasattr(self, 'batt_wattage_label'):
+             self.batt_wattage_label.configure(text_color=self.c_accent)
         
-        if hasattr(self, 'btn_off'): # Simple check to see if UI is ready
-            self.update_control_ui()
+        # Update is already triggered above via self.update_control_ui()
             
         self.save_settings()
 
     def update_control_ui(self, *args):
-        # Update styling of active buttons (simulating radio behavior for buttons)
-        
-        # Brightness
-        b_val = "Low" if self.brightness_var.get() == "Low" else "High"
-        if self.effect_var.get() == "off": b_val = "OFF"
-        
-        for b, v in [(self.btn_off, "OFF"), (self.btn_low, "Low"), (self.btn_high, "High")]:
-             if v == b_val:
-                 b.configure(fg_color=self.c_accent, text_color="#000", border_color=self.c_accent)
-             else:
-                 b.configure(fg_color="transparent", text_color=self.c_text, border_color="#333")
+        # Determine highlighting colors
+        if not hasattr(self, 'sel_txt_col'):
+            self.sel_txt_col = "#000000" if self.theme_var_str.get() in ["Miku", "Neru"] else "#ffffff"
 
-        # Speed
-        s_val = self.speed_var.get()
-        for b in self.speed_btns:
-            if str(s_val) == b.cget("text"):
-                 b.configure(fg_color=self.c_accent, text_color="#000", border_color=self.c_accent)
-            else:
-                 b.configure(fg_color="transparent", text_color=self.c_text, border_color="#333")
-                 
+        # Theme Group
+        if hasattr(self, 'theme_btns'):
+            current = self.theme_var_str.get()
+            for val, btn in self.theme_btns.items():
+                if val == current:
+                    btn.configure(fg_color=self.c_accent, text_color=self.sel_txt_col, hover_color=self.c_accent)
+                else:
+                    btn.configure(fg_color="transparent", text_color="#aaa", hover_color="#3a3a3a")
+
+        # Brightness Group
+        if hasattr(self, 'bright_btns'):
+            b_val = "LOW" if self.brightness_var.get() == "Low" else "HIGH"
+            if self.effect_var.get() == "off": b_val = "OFF"
+            for val, btn in self.bright_btns.items():
+                if val == b_val:
+                    btn.configure(fg_color=self.c_accent, text_color=self.sel_txt_col, hover_color=self.c_accent)
+                else:
+                    btn.configure(fg_color="transparent", text_color="#aaa", hover_color="#333")
+            
+        # Speed Group
+        if hasattr(self, 'speed_btns_list'):
+            s_val = str(self.speed_var.get())
+            for btn in self.speed_btns_list:
+                if btn.cget("text") == s_val:
+                    btn.configure(fg_color=self.c_accent, text_color=self.sel_txt_col, hover_color=self.c_accent)
+                else:
+                    btn.configure(fg_color="transparent", text_color="#aaa", hover_color="#333")
+
+        # Wave Group
+        if hasattr(self, 'wave_btns'):
+            w_val = self.wave_direction_var.get()
+            for val, btn in self.wave_btns.items():
+                if val == w_val:
+                    btn.configure(fg_color=self.c_accent, text_color=self.sel_txt_col, hover_color=self.c_accent)
+                else:
+                    btn.configure(fg_color="transparent", text_color="#aaa", hover_color="#333")
         # Wave Visibility
         if self.effect_var.get() == "wave":
-            # Pack after brightness/speed row so it's in the right spot
-            self.wave_frame.pack(fill="x", pady=5, after=self.row_bs)
+            # Pack after control_bar_frame so it's in the right spot
+            self.wave_frame.pack(fill="x", pady=(0, 15), after=self.control_bar_frame)
         else:
             self.wave_frame.pack_forget()
+
+        # Zone Power Icons
+        if hasattr(self, 'zone_power_btns'):
+            for i, btn in enumerate(self.zone_power_btns):
+                is_on = self.color_vars[i].get() != "000000"
+                if is_on:
+                    btn.configure(image=self.get_icon("bolt_glow", "#ffffff", 14))
+                else:
+                    btn.configure(image=self.get_icon("bolt", "#555555", 14))
+
+    def _on_bright_seg_click(self, val):
+        if val == "OFF":
+            self.effect_var.set("off")
+        elif val == "LOW":
+            self.brightness_var.set("Low")
+            if self.effect_var.get() == "off": self.effect_var.set("static")
+        elif val == "HIGH":
+            self.brightness_var.set("High")
+            if self.effect_var.get() == "off": self.effect_var.set("static")
+        self.on_setting_changed()
 
     # --- Logic Methods (Same as before) ---
     def open_color_wheel(self, index):
@@ -921,7 +1424,12 @@ class LegionLightApp(ctk.CTk):
         return tuple(int(hex_val[i:i+2], 16) for i in (0, 2, 4))
 
     def rgb_to_hex(self, rgb):
-        return "{:02x}{:02x}{:02x}".format(*rgb)
+        return '{:02x}{:02x}{:02x}'.format(*rgb)
+
+    def invert_hex(self, hex_val):
+        rgb = self.hex_to_rgb(hex_val)
+        inv_rgb = tuple(255 - c for c in rgb)
+        return self.rgb_to_hex(inv_rgb)
 
     def interpolate_color(self, c1, c2, t):
         return tuple(int(a + (b - a) * t) for a, b in zip(c1, c2))
@@ -943,8 +1451,330 @@ class LegionLightApp(ctk.CTk):
                 self.apply_settings()
         except: pass
 
+    def select_zone(self, index):
+        """Focus a specific zone for editing. Pass -1 to deselect all."""
+        self.selected_zone = index
+        # Selection highlight is now handled in update_keyboard_preview
+        
+        if index == -1:
+             # Just refresh UI to show all lights on
+             self.update_keyboard_preview()
+             if self.live_preview_var.get():
+                  self.apply_settings()
+             return
+
+        # Update entries to match the color of this zone
+        hex_val = self.color_vars[index].get()
+        rgb = self.hex_to_rgb(hex_val)
+        
+        # Update picker state
+        import colorsys
+        h, s, v = colorsys.rgb_to_hsv(rgb[0]/255, rgb[1]/255, rgb[2]/255)
+        self.current_hue = h * 360
+        self.current_sv = (s * 100, v * 100)
+        
+        self.update_entry_fields(hex_val, rgb)
+        self.render_picker_canvases()
+        self.update_keyboard_preview()
+
+    def update_entry_fields(self, hex_val, rgb):
+        """Update the text entry fields sync with selection"""
+        if hasattr(self, 'hex_entry'):
+            self.hex_entry.delete(0, "end")
+            self.hex_entry.insert(0, hex_val.upper())
+            for i, val in enumerate(rgb):
+                self.rgb_entries[i].delete(0, "end")
+                self.rgb_entries[i].insert(0, str(val))
+
+    def render_picker_canvases(self):
+        """Generate static images for the picker UI using fixed dimensions"""
+        if not hasattr(self, 'sv_canvas'):
+            return
+            
+        w, h = 350, 180
+        
+        import colorsys
+        
+        sv_img = Image.new("RGB", (w, h))
+        sv_data = []
+        for y in range(h):
+            v = 1.0 - (y / h)
+            for x in range(w):
+                s = x / w
+                r, g, b = colorsys.hsv_to_rgb(self.current_hue / 360, s, v)
+                sv_data.append((int(r*255), int(g*255), int(b*255)))
+        sv_img.putdata(sv_data)
+        
+        # Add selector crosshair on canvas
+        draw = ImageDraw.Draw(sv_img)
+        sel_x = int((self.current_sv[0] / 100) * w)
+        sel_y = int((1.0 - self.current_sv[1] / 100) * h)
+        draw.ellipse([sel_x-4, sel_y-4, sel_x+4, sel_y+4], outline="#fff", width=2)
+        
+        # Hue Bar
+        hw, hh = 30, 150
+        hue_img = Image.new("RGB", (hw, hh))
+        hue_data = []
+        for y in range(hh):
+            hue = 1.0 - (y / hh)
+            r, g, b = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
+            for x in range(hw):
+                hue_data.append((int(r*255), int(g*255), int(b*255)))
+        hue_img.putdata(hue_data)
+        
+        # Add selector line on hue
+        draw_h = ImageDraw.Draw(hue_img)
+        sel_hy = int((1.0 - self.current_hue / 360) * hh)
+        draw_h.line([0, sel_hy, hw, sel_hy], fill="#fff", width=3)
+        
+        self.sv_canvas.configure(image=ctk.CTkImage(sv_img, sv_img, size=(w, h)))
+        self.hue_canvas.configure(image=ctk.CTkImage(hue_img, hue_img, size=(hw, hh)))
+
+    def on_canvas_drag(self, event):
+        """Update color based on SV canvas interaction (Fixed size 350x180)"""
+        w, h = 350, 180
+        x = max(0, min(w, event.x))
+        y = max(0, min(h, event.y))
+        
+        self.current_sv = ((x / w) * 100, (1.0 - (y / h)) * 100)
+        self.sync_picker_to_actual()
+
+    def on_hue_drag(self, event):
+        """Update color based on Hue bar interaction"""
+        h_h = 150
+        y = max(0, min(h_h, event.y))
+        self.current_hue = (1.0 - (y / h_h)) * 360
+        self.sync_picker_to_actual()
+
+    def sync_picker_to_actual(self):
+        """Update everything from the HSV picker state"""
+        import colorsys
+        r, g, b = colorsys.hsv_to_rgb(self.current_hue / 360, self.current_sv[0] / 100, self.current_sv[1] / 100)
+        rgb = (int(r*255), int(g*255), int(b*255))
+        hex_val = self.rgb_to_hex(rgb)
+        
+        self.color_vars[self.selected_zone].set(hex_val)
+        
+        self.update_entry_fields(hex_val, rgb)
+        self.render_picker_canvases()
+        self.update_keyboard_preview()
+        if self.live_preview_var.get():
+             self.apply_settings()
+             
+    def add_to_history(self, hex_val):
+        """Add a color to history if it's new and update UI"""
+        hex_val = "#" + hex_val.lstrip("#")
+        if hex_val == "#333333" or hex_val == "#000000": return # Ignore default/black
+        
+        if hex_val in self.color_history:
+            self.color_history.remove(hex_val)
+        self.color_history.insert(0, hex_val)
+        self.color_history = self.color_history[:12]
+        self.update_history_ui()
+        self.save_settings() # Persist history changes
+
+    def update_history_ui(self):
+        """Refresh history swatches"""
+        if not hasattr(self, 'history_swatches'): return
+        for i, hex_c in enumerate(self.color_history):
+            self.history_swatches[i].configure(fg_color=hex_c, hover_color=hex_c, 
+                                              command=lambda c=hex_c: self.apply_preset(c))
+
+    def on_hex_entered(self, event):
+        hex_val = self.hex_entry.get().lstrip("#")
+        if re.match(r"^[0-9a-fA-F]{6}$", hex_val):
+            self.apply_preset(hex_val)
+            self.add_to_history(hex_val)
+        
+    def on_rgb_entered(self, event):
+        try:
+             rgb = tuple(int(e.get()) for e in self.rgb_entries)
+             hex_val = self.rgb_to_hex(rgb)
+             self.apply_preset(hex_val)
+             self.add_to_history(hex_val)
+        except: pass
+
+    def apply_preset(self, color_hex):
+        """Apply a preset color to the selected zone"""
+        hex_val = color_hex.lstrip("#")
+        self.color_vars[self.selected_zone].set(hex_val)
+        
+        # Update picker state
+        rgb = self.hex_to_rgb(hex_val)
+        import colorsys
+        h, s, v = colorsys.rgb_to_hsv(rgb[0]/255, rgb[1]/255, rgb[2]/255)
+        self.current_hue = h * 360
+        self.current_sv = (s * 100, v * 100)
+        
+        self.update_entry_fields(hex_val, rgb)
+        self.render_picker_canvases()
+        self.update_keyboard_preview()
+        if self.live_preview_var.get():
+             self.apply_settings()
+
+    def toggle_zone_power(self, index):
+        """Toggle a specific zone between its last color and black (off)"""
+        current_hex = self.color_vars[index].get()
+        
+        if current_hex != "000000":
+            # Turn OFF: save current and set to black
+            self.last_on_colors[index] = current_hex
+            self.apply_preset("000000") if self.selected_zone == index else self.set_zone_silent(index, "000000")
+        else:
+            # Turn ON: restore last color
+            restore_hex = self.last_on_colors[index]
+            if restore_hex == "000000": restore_hex = "39c5bb" # Fallback
+            self.apply_preset(restore_hex) if self.selected_zone == index else self.set_zone_silent(index, restore_hex)
+        
+        self.update_control_ui()
+
+    def set_zone_silent(self, index, hex_val):
+        """Update a zone color without forcing selection change"""
+        hex_val = hex_val.lstrip("#")
+        self.color_vars[index].set(hex_val)
+        self.update_keyboard_preview()
+        if self.live_preview_var.get():
+             self.apply_settings()
+
+    def on_preview_click(self, event):
+        """Handle clicks on large keyboard preview. Selective focus."""
+        # Scale to our 1000x300 internal drawing space
+        cx, cy = event.x * 2, event.y * 2
+        
+        body_padding = 10
+        # Matches logic in update_keyboard_preview
+        zone_w = (1000 - (body_padding * 4)) // 4
+        zone_h = 300 - (body_padding * 6)
+        zone_y1 = body_padding * 3
+        zone_y2 = zone_y1 + zone_h
+        
+        found_zone = -1
+        # If click is inside the vertical boundary of the zones
+        if zone_y1 <= cy <= zone_y2:
+            for i in range(4):
+                z_x1 = (body_padding * 2) + (i * zone_w)
+                z_x2 = z_x1 + zone_w - 5
+                if z_x1 <= cx <= z_x2:
+                    found_zone = i
+                    break
+        
+        # If found_zone is -1, it means we clicked the keyboard frame/padding
+        self.select_zone(found_zone)
+
+    def blink_loop(self):
+        """Toggle blink state and redraw keyboard preview for selection feedback"""
+        self.blink_active = not self.blink_active
+        self.update_keyboard_preview()
+        
+        # Also pulse physical keyboard if live preview is on
+        if self.live_preview_var.get():
+            self.apply_settings(is_blink=True)
+            
+        self.after(600, self.blink_loop)
+
+    def sw_animation_loop(self):
+        """Ticker for software-driven lighting effects"""
+        effect = self.effect_var.get()
+        is_sw = effect in ["Police", "Scanner", "Heartbeat", "Fire", "Battery", "Soft Wave"]
+        
+        if is_sw:
+            self.sw_active_colors = self.calculate_sw_effect(effect)
+            self.apply_settings(is_sw_anim=True)
+            self.update_keyboard_preview()
+            self.sw_animation_step += 1
+            
+        # Determine timing based on effect and speed
+        speed = self.speed_var.get()
+        if effect == "Fire":
+            delay = {1: 250, 2: 150, 3: 80, 4: 40}.get(speed, 100)
+        elif effect == "Scanner":
+            delay = {1: 400, 2: 250, 3: 120, 4: 60}.get(speed, 150)
+        elif effect == "Police":
+            delay = {1: 600, 2: 350, 3: 180, 4: 90}.get(speed, 350)
+        elif effect == "Heartbeat":
+            sub = self.sw_animation_step % 4
+            if sub == 0 or sub == 2: delay = 120
+            elif sub == 1: delay = 180
+            else: delay = 1200 # Pause between beats
+        else:
+            delay = {1: 800, 2: 400, 3: 200, 4: 100}.get(speed, 400)
+            
+        self.after(delay, self.sw_animation_loop)
+
+    def calculate_sw_effect(self, effect):
+        """Logic for software lighting animations"""
+        step = self.sw_animation_step
+        
+        if effect == "Police":
+             # Alternate flashing Red and Blue
+             if step % 2 == 0:
+                 return ["ff0000", "ff0000", "0000ff", "0000ff"]
+             else:
+                 return ["0000ff", "0000ff", "ff0000", "ff0000"]
+                 
+        elif effect == "Scanner":
+             # Red scanner bounce
+             idx_map = [0, 1, 2, 3, 2, 1]
+             active = idx_map[step % 6]
+             res = ["000000"] * 4
+             res[active] = self.color_vars[0].get() # Use color from Z1 as theme
+             return res
+             
+        elif effect == "Heartbeat":
+             # Double-thump pulse
+             sub = step % 4
+             if sub == 0 or sub == 2:
+                  return [v.get() for v in self.color_vars]
+             return ["000000"] * 4
+             
+        elif effect == "Fire":
+             # Rapid randomized intensities of orange/red
+             cols = []
+             for _ in range(4):
+                 r = random.randint(180, 255)
+                 g = random.randint(0, 80)
+                 cols.append(f"{r:02x}{g:02x}00")
+             return cols
+             
+        elif effect == "Battery":
+             # Zone representation of battery percentage
+             try:
+                data = self.get_battery_status_data()
+                p = float(data.get('capacity', 0))
+             except: p = 0
+             
+             # Calculate how many zones to light up
+             count = 0
+             if p > 0: count = 1
+             if p > 25: count = 2
+             if p > 50: count = 3
+             if p > 75: count = 4
+             
+             # Color scaling: Green (Full) -> Yellow (Half) -> Red (Low)
+             if p > 70: base_col = (0, 255, 0)      # Green
+             elif p > 40: base_col = (200, 200, 0) # Yellow-Gold
+             elif p > 20: base_col = (255, 120, 0) # Orange
+             else: base_col = (255, 0, 0)         # Red
+             
+             # Suble pulse effect using sw_animation_step
+             pulse = 0.7 + (0.3 * abs(math.sin(step * 0.2)))
+             active_rgb = tuple(int(c * pulse) for c in base_col)
+             active_hex = self.rgb_to_hex(active_rgb)
+             
+             res = ["000000"] * 4
+             for i in range(count):
+                 res[i] = active_hex
+             return res
+             
+        elif effect == "Soft Wave":
+             # Software rotation of 4 colors
+             return [self.color_vars[(step + i) % 4].get() for i in range(4)]
+             
+        return ["000000"] * 4
+
     def on_setting_changed(self, *args):
         self.update_control_ui()
+        self.update_keyboard_preview()
         if self.live_preview_var.get():
             self.apply_settings()
 
@@ -996,6 +1826,9 @@ class LegionLightApp(ctk.CTk):
             "theme": self.theme_var_str.get(),
             "live_preview": self.live_preview_var.get(),
             "current_profile": self.current_profile_var.get(),
+            "color_history": self.color_history,
+            "pref_blink_opposite": self.pref_blink_opposite.get(),
+            "pref_solo_mode": self.pref_solo_mode.get(),
             "profiles": self.profiles
         }
         try:
@@ -1014,6 +1847,9 @@ class LegionLightApp(ctk.CTk):
                     theme = data.get("theme", "Miku")
                     self.theme_var_str.set(theme)
                     self.live_preview_var.set(data.get("live_preview", False))
+                    self.color_history = data.get("color_history", ["#333333"] * 12)
+                    self.pref_blink_opposite.set(data.get("pref_blink_opposite", False))
+                    self.pref_solo_mode.set(data.get("pref_solo_mode", False))
                     self.profiles = data.get("profiles", {"Default": self._get_current_settings_dict()})
                     self.current_profile_var.set(data.get("current_profile", "Default"))
                     # REMOVED load_profile call here as it triggers UI updates too early
@@ -1034,17 +1870,54 @@ class LegionLightApp(ctk.CTk):
             "colors": [v.get() for v in self.color_vars]
         }
 
-    def apply_settings(self):
+    def apply_settings(self, is_blink=False, is_sw_anim=False):
         if not self.controller: return
-        colors = [v.get() for v in self.color_vars] if self.effect_var.get() in ["static","breath"] else None
+        
+        # Don't pulse if effect is not static/breath or if brightness is off
+        effect = self.effect_var.get()
+        if is_blink and effect not in ["static", "breath"]: return
+        if self.brightness_var.get() == "OFF": return
+
+        # Software Animations map to hardware 'static' mode
+        hw_effect = effect
+        if is_sw_anim or effect in ["Police", "Scanner", "Heartbeat", "Fire", "Battery", "Soft Wave"]:
+            hw_effect = "static"
+
+        colors = []
+        for i, v in enumerate(self.color_vars):
+            # Base color source: software active colors or static vars
+            if is_sw_anim or effect in ["Police", "Scanner", "Heartbeat", "Fire", "Battery", "Soft Wave"]:
+                hex_val = self.sw_active_colors[i]
+            else:
+                hex_val = v.get().lstrip("#")
+            
+            # If this is the "off" phase of the blink and this is the selected zone, handle feedback
+            if is_blink and not self.blink_active and i == self.selected_zone and i != -1:
+                if self.pref_blink_opposite.get():
+                    # Pulse with Inverted Color (Exclusive Pro Feature)
+                    colors.append(self.invert_hex(hex_val))
+                else:
+                    rgb = self.hex_to_rgb(hex_val)
+                    # Standard Dim to 30% brightness
+                    dim_rgb = tuple(int(c * 0.3) for c in rgb)
+                    colors.append(self.rgb_to_hex(dim_rgb))
+            elif self.pref_solo_mode.get() and self.selected_zone != -1 and i != self.selected_zone and not is_sw_anim:
+                # Solo Mode: Turn off other zones to focus on selected area
+                colors.append("000000")
+            else:
+                colors.append(hex_val)
+
         try:
             data = self.controller.build_control_string(
-                self.effect_var.get(), colors, self.speed_var.get(), 
+                hw_effect, colors, self.speed_var.get(), 
                 2 if self.brightness_var.get() == "High" else 1,
-                self.wave_direction_var.get() if self.effect_var.get() == "wave" else None
+                self.wave_direction_var.get() if hw_effect == "wave" else None
             )
             self.controller.send_control_string(data)
-            self.save_settings()
+            
+            # Only save settings for manual changes, not hardware blinks or sw animations
+            if not is_blink and not is_sw_anim:
+                self.save_settings()
         except: pass
 
     def set_power_mode(self, choice):

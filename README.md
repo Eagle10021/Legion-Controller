@@ -5,12 +5,15 @@ A graphical user interface for controlling keyboard RGB lighting and power modes
 ![Legion Controller Preview](images/preview.png)
 
 ## Features
-- **4-Zone RGB Control**: Static, Breath, Wave, and Hue effects.
-    - *Gradient Generator*: Automatically calculate smooth transitions (Zones 2 & 3) by simply selecting your desired start color in **Zone 1** and end color in **Zone 4**.
+- **RGB Lighting Controls**:
+    - **Hardware Modes**: Static, Breath, Wave, and Hue effects.
+    - **Software-Driven Patterns**: interactive patterns powered by the app, including **Police Strobe**, **Scanner**, **Heartbeat**, **Fire Flicker**, and **Soft Wave**.
+    - **Battery Insight Mode**: A real-time battery gauge that uses the 4 keyboard zones (0-25% Red Zone 1, 26-50% Yellow-Gold Zones 1-2, up to All Green for full charge). Features a subtle pulsating animation to indicate active tracking.
+    - **Gradient Generator**: Automatically calculate smooth transitions (Zones 2 & 3) by simply selecting your desired start color in **Zone 1** and end color in **Zone 4**.
 - **Power Management**: Toggle Conservation Mode (~60% or 80% limit based on model) and Rapid Charge. *(Note: Rapid Charge is currently non-functional on many models as the sysfs files cannot be located).*
-- **System Dashboard**: View hardware specs (CPU, GPU, RAM) and battery status.
+- **System Dashboard**: View hardware specs (CPU, GPU, RAM) and detailed battery health (Wh capacity, cycle health, and real-time wattage discharge).
 - **Profiles**: Save and switch between custom lighting setups.
-- **Themed UI**: Dark-mode interface with Miku/Teto/Neru color themes.
+- **Themed UI**: Dark-mode interface with Miku/Teto/Neru color themes, featuring dynamic high-contrast text for perfect readability on all accent colors.
 
 > [!IMPORTANT]
 > **Rapid Charge Note**: This feature currently may not work correctly or appear in the UI because the required kernel/firmware files (`rapid_charge`) are often missing or relocated on Linux systems. **Conservation Mode** (~60% or 80% limit depending on model) and **Normal Charging** remain fully functional.
