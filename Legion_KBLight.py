@@ -1741,19 +1741,29 @@ class LegionLightApp(ctk.CTk):
              try:
                 data = self.get_battery_status_data()
                 p = float(data.get('capacity', 0))
-             except: p = 0
+                status = data.get('status', 'Unknown')
+             except: p = 0; status = 'Unknown'
              
-             # Calculate how many zones to light up
-             count = 0
-             if p > 0: count = 1
-             if p > 25: count = 2
-             if p > 50: count = 3
-             if p > 75: count = 4
+             # CRITICAL WARNING: 
+             if p <= 15:
+                 if status != "Charging":
+                     # Discharging: Blink ALL Red
+                     return ["ff0000" if step % 2 == 0 else "000000"] * 4
+                 else:
+                     # Charging: Blink Zone 1 only
+                     z1 = "ff0000" if step % 2 == 0 else "000000"
+                     return [z1, "000000", "000000", "000000"]
+             
+             # Calculate how many zones to light up (Progress Bar)
+             count = 1
+             if p >= 95: count = 4
+             elif p >= 50: count = 3
+             elif p >= 25: count = 2
              
              # Color scaling: Green (Full) -> Yellow (Half) -> Red (Low)
-             if p > 70: base_col = (0, 255, 0)      # Green
-             elif p > 40: base_col = (200, 200, 0) # Yellow-Gold
-             elif p > 20: base_col = (255, 120, 0) # Orange
+             if p >= 75: base_col = (0, 255, 0)      # Green
+             elif p >= 45: base_col = (200, 200, 0) # Yellow-Gold
+             elif p >= 20: base_col = (255, 120, 0) # Orange
              else: base_col = (255, 0, 0)         # Red
              
              # Suble pulse effect using sw_animation_step

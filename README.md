@@ -8,7 +8,10 @@ A graphical user interface for controlling keyboard RGB lighting and power modes
 - **RGB Lighting Controls**:
     - **Hardware Modes**: Static, Breath, Wave, and Hue effects.
     - **Software-Driven Patterns**: interactive patterns powered by the app, including **Police Strobe**, **Scanner**, **Heartbeat**, **Fire Flicker**, and **Soft Wave**.
-    - **Battery Insight Mode**: A real-time battery gauge that uses the 4 keyboard zones (0-25% Red Zone 1, 26-50% Yellow-Gold Zones 1-2, up to All Green for full charge). Features a subtle pulsating animation to indicate active tracking.
+    - **Battery Insight Mode**: A real-time battery gauge using the 4 keyboard zones.
+        - *Quartile Progress*: 0-24% (Zone 1), 25-49% (Zones 1-2), 50-94% (Zones 1-3), 95%+ (All Zones).
+        - *Critical Alerts*: Entire keyboard blinks **Red** when under 15% (discharging). If plugged in but under 15%, only **Zone 1** blinks to acknowledge charging.
+        - *Smart Thresholds*: Color shifts to Green at 75%. Optimized for systems where BIOS limits charge to ~96% (full bar triggers at 95%).
     - **Gradient Generator**: Automatically calculate smooth transitions (Zones 2 & 3) by simply selecting your desired start color in **Zone 1** and end color in **Zone 4**.
 - **Power Management**: Toggle Conservation Mode (~60% or 80% limit based on model) and Rapid Charge. *(Note: Rapid Charge is currently non-functional on many models as the sysfs files cannot be located).*
 - **System Dashboard**: View hardware specs (CPU, GPU, RAM) and detailed battery health (Wh capacity, cycle health, and real-time wattage discharge).
