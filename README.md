@@ -1,121 +1,88 @@
 # Legion Controller
 
-A graphical user interface for controlling keyboard RGB lighting and power modes (Conservation/Rapid Charge) on Lenovo Legion laptops. This application is designed specifically for **4-zone RGB models** and is optimized for **Gnome on Wayland**.
+A graphical user interface for controlling keyboard RGB lighting and power modes on Lenovo Legion laptops. This application is designed specifically for 4-zone RGB models and is optimized for Linux environments using Gnome on Wayland.
 
 ![Legion Controller Preview](images/preview.png)
 
-## Features
-- **RGB Lighting Controls**:
-    - **Hardware Modes**: Static, Breath, Wave, and Hue effects.
-    - **Software-Driven Patterns**: interactive patterns powered by the app, including **Police Strobe**, **Scanner**, **Heartbeat**, **Fire Flicker**, and **Soft Wave**.
-    - **Battery Insight Mode**: A real-time battery gauge using the 4 keyboard zones.
-        - *Quartile Progress*: 0-24% (Zone 1), 25-49% (Zones 1-2), 50-94% (Zones 1-3), 95%+ (All Zones).
-        - *Critical Alerts*: Entire keyboard blinks **Red** when under 15% (discharging). If plugged in but under 15%, only **Zone 1** blinks to acknowledge charging.
-        - *Smart Thresholds*: Color shifts to Green at 75%. Optimized for systems where BIOS limits charge to ~96% (full bar triggers at 95%).
-    - **Gradient Generator**: Automatically calculate smooth transitions (Zones 2 & 3) by simply selecting your desired start color in **Zone 1** and end color in **Zone 4**.
-- **Power Management**: Toggle Conservation Mode (~60% or 80% limit based on model) and Rapid Charge. *(Note: Rapid Charge is currently non-functional on many models as the sysfs files cannot be located).*
-- **System Dashboard**: View hardware specs (CPU, GPU, RAM) and detailed battery health (Wh capacity, cycle health, and real-time wattage discharge).
-- **Profiles**: Save and switch between custom lighting setups.
-- **Themed UI**: Dark-mode interface with Miku/Teto/Neru color themes, featuring dynamic high-contrast text for perfect readability on all accent colors.
+## Core Features
 
-> [!IMPORTANT]
-> **Rapid Charge Note**: This feature currently may not work correctly or appear in the UI because the required kernel/firmware files (`rapid_charge`) are often missing or relocated on Linux systems. **Conservation Mode** (~60% or 80% limit depending on model) and **Normal Charging** remain fully functional.
+### Advanced Lighting Architecture
+*   **Zone Management**: Complete control over the four distinct keyboard zones.
+    *   **Visual Selection**: Select zones directly by clicking the interactive keyboard preview.
+    *   **Power Toggling**: Each zone features an independent power control (lightning bolt icon) to turn specific areas on or off. Active zones display a glowing icon, while inactive zones stay dimmed.
+    *   **Deselection Logic**: Click the keyboard bezel or the application background to deselect all zones for global setting application.
+*   **Hardware FX**: Direct support for firmware-level Static, Breath, Wave, and Hue effects.
+*   **Software-Driven Animations**: Custom-coded patterns that expand hardware capability:
+    *   **Police Strobe**: Alternates rapid red and blue flashes across keyboard halves.
+    *   **Scanner**: A single beam that bounces back and forth across the four zones.
+    *   **Heartbeat**: A cinematic double-pulse rhythm.
+    *   **Fire Flicker**: Randomized warm-tone intensities simulating a live flame.
+    *   **Soft Wave**: A software-cycled rotation of your four chosen custom colors.
+*   **Gradient Generator**: Automatically calculates smooth color transitions for the middle zones by interpolating between your selections for Zone 1 and Zone 4.
 
----
+### Intelligent Battery Insight
+*   **Interactive Keyboard Gauge**: In Battery mode, the physical keyboard becomes a live progress bar.
+    *   **Dynamic Progress**: 0-24% (Zone 1), 25-49% (Zones 1-2), 50-94% (Zones 1-3), 95%+ (All Zones).
+    *   **Color Mapping**: Transitions from Red (Low) to Orange, Yellow-Gold, and finally Green (above 75%).
+    *   **BIOS Optimization**: The 100% "Full" state triggers at 95% charge to account for laptop BIOS limits that often stop charging at 96-98%.
+*   **Critical Alerts**:
+    *   **Emergency Pulse**: The entire keyboard blinks red when battery drops to 15% or lower while discharging.
+    *   **Charging Awareness**: If plugged in but still under 15%, the alarm calms to a single red blink on Zone 1 only.
 
-## 1. Prerequisites & Dependencies
+### System Dashboard and Tools
+*   **Hardware Monitoring**: Real-time display of CPU, GPU, and RAM specifications.
+*   **Advanced Battery Diagnostics**: Beyond simple percentage, the dashboard tracks:
+    *   **Real-time Wattage**: Monitor exact discharge or charge speed in Watts.
+    *   **Health Tracking**: Compare current Wh capacity against original design capacity.
+    *   **Time Estimates**: Dynamic calculations for time until empty or time until full charge.
+*   **Power Mode Control**: Direct toggle for Conservation Mode (limiting charge to 60-80% for battery longevity) and Normal/Rapid charging modes.
 
-This app uses `pyusb` to talk to the keyboard controller and `customtkinter` for the interface.
+### User Experience and Customization
+*   **Focus Utilities**: 
+    *   **Blink Focus**: The selected zone pulses to help you identify which area you are editing. Supports color inversion for high-visibility focusing.
+    *   **Solo Mode**: Dims all other zones except the one currently selected.
+*   **Color Management**: 
+    *   **Integrated Picker**: High-precision SV canvas and Hue bar for custom color selection.
+    *   **Persistent History**: A 12-slot color history that saves across sessions.
+    *   **Presets**: Quick-select buttons for popular character-inspired palettes (Miku, Teto, Neru, Gumi).
+*   **Aesthetic Themes**: Selectable UI skins including Miku (Teal), Teto (Red), and Neru (Gold). The UI dynamically adjusts text contrast to ensure black text on light colors and white text on dark colors.
+*   **Profile System**: Save, delete, export, and import complete lighting configurations as JSON files.
 
-### Install System Requirements
+## Installation
+
+### Prerequisites
+The application requires pyusb for hardware communication and customtkinter for the interface.
+
 ```bash
-# Ubuntu/Debian/Fedora
+# Install dependencies
 pip install pyusb customtkinter Pillow
 ```
 
-### Enable Unprivileged Usage (USB Rules)
-By default, Linux requires root to access USB devices. Create a udev rule to run the controller without `sudo`:
+### USB Access Permissions (udev)
+By default, Linux limits USB device access. You must create a udev rule to run the controller without sudo.
 
-1. Check your Keyboard Controller ID:
-   ```bash
-   lsusb | grep -i "Integrated Technology Express"
-   ```
-   *Usually, it is `048d:c965` or `048d:c995`.*
+1.  Identify your Keyboard Controller ID:
+    ```bash
+    lsusb | grep -i "Integrated Technology Express"
+    ```
+    (Note the four-digit ID after the colon, e.g., c965)
 
-2. Create the rule file:
-   ```bash
-   sudo nano /etc/udev/rules.d/99-kblight.rules
-   ```
+2.  Create the rules file:
+    ```bash
+    sudo nano /etc/udev/rules.d/99-kblight.rules
+    ```
 
-3. Paste the following (replace `c965` with your ID if different):
-   ```text
-   SUBSYSTEM=="usb", ATTR{idVendor}=="048d", ATTR{idProduct}=="c965", MODE="0666"
-   ```
+3.  Insert the following (update idProduct if yours differs from c965):
+    ```text
+    SUBSYSTEM=="usb", ATTR{idVendor}=="048d", ATTR{idProduct}=="c965", MODE="0666"
+    ```
 
-4. Reload rules:
-   ```bash
-   sudo udevadm control --reload-rules && sudo udevadm trigger
-   ```
+4.  Reload the udev system:
+    ```bash
+    sudo udevadm control --reload-rules && sudo udevadm trigger
+    ```
 
-
----
-
-## 2. Installation & Organization
-
-Note: It is suggested to keep the application in your `Documents` folder to ensure consistent file paths.
-
-```bash
-# Clone the repository
-git clone https://github.com/Eagle10021/Legion-Controller.git
-
-# Move it to your Documents folder
-mv Legion-Controller ~/Documents/
-cd ~/Documents/Legion-Controller
-```
-
-### 2a. Configure Hardware IDs
-Open `Legion_KBLight.py` and ensure the `VENDOR` and `PRODUCT` IDs match your `lsusb` output (around lines 56-57). If your product ID was different (e.g. `c995`), change the `0xC965` value:
-
-```python
-class LedController:
-    VENDOR = 0x048D
-    PRODUCT = 0xC965  # Replace with your Product ID
-```
-
----
-
-## 3. Desktop Entry (Application Menu Icon)
-
-To see the app in your Gnome application drawer, you need to create a `.desktop` file.
-
-1. Create the file:
-   ```bash
-   nano ~/.local/share/applications/legion-controller.desktop
-   ```
-
-2. Paste and customize the following template:
-   *Note: If you moved the folder to a different location, update the `/home/eagle/Documents/Legion-Controller/...` paths below to match your **actual username** and folder path.*
-
-```ini
-[Desktop Entry]
-Type=Application
-Name=Legion Controller
-Comment=Keyboard RGB and Charging controller for Legion laptops
-# Replace 'eagle' with your actual username and verify the path!
-Exec=python3 /home/eagle/Documents/Legion-Controller/Legion_KBLight.py
-Icon=/home/eagle/Documents/Legion-Controller/images/Senko_Loaf.jpg
-Terminal=false
-Categories=Utility;Settings;
-StartupWMClass=legioncontrol
-```
-
-3. Save and Exit. 
-
-4. **Log out and log back in** for the application icon to appear in your dashboard and for the `udev` rules to take full effect.
-
----
-
-## Technical Credits
-
-- **Backend Logic**: This project is built upon the excellent lighting control reverse-engineering work done in [l5p-kbl-2024-Gen9](https://github.com/Drakanio/l5p-kbl-2024-Gen9/tree/main) by Drakanio and the original [l5p-kbl](https://github.com/imShara/l5p-kbl) by imShara.
-- **Icon**: [Senko Loaf](https://knowyourmeme.com/memes/senko-loaf) (`Senko_Loaf.jpg`)
+## Development and Credits
+*   **Backend**: Built on reverse-engineering work from the l5p-kbl projects by Drakanio and Shara.
+*   **Icon**: Senko Loaf (images/Senko_Loaf.jpg).
+*   **Optimization**: Designed for the Lenovo Legion 5 Pro and similar 4-zone RGB laptop models.
