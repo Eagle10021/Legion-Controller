@@ -1794,9 +1794,8 @@ class LegionLightApp(ctk.CTk):
                      # Discharging: Blink ALL Red
                      return ["ff0000" if step % 2 == 0 else "000000"] * 4
                  else:
-                     # Charging: Blink Zone 1 only
-                     z1 = "ff0000" if step % 2 == 0 else "000000"
-                     return [z1, "000000", "000000", "000000"]
+                     # Charging: Solid Zone 1 Red (acknowledgement)
+                     return ["ff0000", "000000", "000000", "000000"]
              
              # Calculate how many zones to light up (Progress Bar)
              full_thresh = self.pref_batt_full.get()

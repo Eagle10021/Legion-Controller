@@ -18,6 +18,7 @@ A graphical user interface for controlling keyboard RGB lighting and power modes
     *   **Heartbeat**: A cinematic double-pulse rhythm.
     *   **Fire Flicker**: Randomized warm-tone intensities simulating a live flame.
     *   **Soft Wave**: A software-cycled rotation of your four chosen custom colors.
+    *   **Battery Gauge**: Transforms the entire keyboard into a live, color-coded power meter that reflects your real-time charge level.
 *   **Gradient Generator**: Automatically calculates smooth color transitions for the middle zones by interpolating between your selections for Zone 1 and Zone 4.
 
 ### Intelligent Battery Insight
@@ -27,7 +28,7 @@ A graphical user interface for controlling keyboard RGB lighting and power modes
     *   **BIOS Optimization**: The 100% "Full" state triggers at 95% charge to account for laptop BIOS limits that often stop charging at 96-98%.
 *   **Critical Alerts**:
     *   **Emergency Pulse**: The entire keyboard blinks red when battery drops to 15% or lower while discharging.
-    *   **Charging Awareness**: If plugged in but still under 15%, the alarm calms to a single red blink on Zone 1 only.
+    *   **Charging Awareness**: If plugged in but still under the low threshold, the alarm calms to a solid red state on Zone 1 only to acknowledge connection without being distracting.
 
 ### System Dashboard and Tools
 *   **Hardware Monitoring**: Real-time display of CPU, GPU, and RAM specifications.
