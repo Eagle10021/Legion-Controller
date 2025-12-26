@@ -12,12 +12,12 @@ A graphical user interface for controlling keyboard RGB lighting and power modes
     *   **Power Toggling**: Each zone features an independent power control (lightning bolt icon) to turn specific areas on or off. Active zones display a glowing icon, while inactive zones stay dimmed.
     *   **Deselection Logic**: Click the keyboard bezel or the application background to deselect all zones for global setting application.
 *   **Hardware FX**: Direct support for firmware-level Static, Breath, Wave, and Hue effects.
-*   **Software-Driven Animations**: Custom-coded patterns that expand hardware capability:
-    *   **Police Strobe**: Alternates rapid red and blue flashes across keyboard halves.
-    *   **Scanner**: A single beam that bounces back and forth across the four zones.
-    *   **Heartbeat**: A cinematic double-pulse rhythm.
+*   **Software-Driven Animations**: Custom-coded patterns that expand hardware capability. Except for the Police effect, these patterns derive their colors from your user-assigned static zone colors.
+    *   **Police Strobe**: Alternates rapid red and blue flashes across keyboard halves (Fixed colors).
+    *   **Scanner**: A single beam that bounces back and forth across the four zones (Uses Zone 1 color).
+    *   **Heartbeat**: A cinematic double-pulse rhythm (Uses all 4 currently assigned zone colors).
     *   **Fire Flicker**: Randomized warm-tone intensities simulating a live flame.
-    *   **Soft Wave**: A software-cycled rotation of your four chosen custom colors.
+    *   **Soft Wave**: A software-cycled rotation of your four assigned zone colors. Supports direction control (LTR/RTL).
     *   **Battery Gauge**: Transforms the entire keyboard into a live, color-coded power meter that reflects your real-time charge level.
 *   **Gradient Generator**: Automatically calculates smooth color transitions for the middle zones by interpolating between your selections for Zone 1 and Zone 4.
 
@@ -49,6 +49,7 @@ A graphical user interface for controlling keyboard RGB lighting and power modes
     *   **Presets**: Quick-select buttons for popular character-inspired palettes (Miku, Teto, Neru, Gumi).
 *   **Aesthetic Themes**: Selectable UI skins including Miku (Teal), Teto (Red), and Neru (Gold). The UI dynamically adjusts text contrast to ensure black text on light colors and white text on dark colors.
 *   **Profile System**: Save, delete, export, and import complete lighting configurations as JSON files.
+*   **Centralized Settings**: A dedicated, scrollable settings menu accessible via the header gear icon for managing advanced feedback, battery thresholds, and background behavior.
 
 ### Background Persistence and Instance Control
 *   **System Tray Integration**: Closing the main window (X button) now minimizes the app to the system tray instead of quitting. This allows software-driven animations and battery monitoring to continue running in the background.

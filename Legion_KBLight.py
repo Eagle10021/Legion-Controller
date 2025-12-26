@@ -1231,20 +1231,20 @@ class LegionLightApp(ctk.CTk):
         """Show advanced UI interaction settings popup"""
         top = ctk.CTkToplevel(self)
         top.title("Control Settings")
-        top.geometry("450x400")
+        top.geometry("450x500")
         top.attributes("-topmost", True)
         top.configure(fg_color=self.c_bg)
         
         # Center popup
         x = self.winfo_x() + (self.winfo_width() // 2) - 225
-        y = self.winfo_y() + (self.winfo_height() // 2) - 200
+        y = self.winfo_y() + (self.winfo_height() // 2) - 250
         top.geometry(f"+{x}+{y}")
         top.transient(self)
         
-        ctk.CTkLabel(top, text="ADVANCED FEEDBACK", font=("Segoe UI", 16, "bold"), text_color=self.c_text).pack(pady=(20, 20))
+        container = ctk.CTkScrollableFrame(top, fg_color="transparent")
+        container.pack(fill="both", expand=True, padx=20, pady=(10, 0))
         
-        container = ctk.CTkFrame(top, fg_color="transparent")
-        container.pack(fill="both", expand=True, padx=40)
+        ctk.CTkLabel(container, text="ADVANCED FEEDBACK", font=("Segoe UI", 16, "bold"), text_color=self.c_text).pack(pady=(10, 20))
         
         # Toggle 1: Opposite Color Blink
         f1 = ctk.CTkFrame(container, fg_color="transparent")
@@ -1252,7 +1252,7 @@ class LegionLightApp(ctk.CTk):
         ctk.CTkLabel(f1, text="Opposite Color Pulse", font=("Segoe UI", 13), text_color="#ccc").pack(side="left")
         ctk.CTkSwitch(f1, text="", variable=self.pref_blink_opposite, width=40,
                       command=self.save_settings).pack(side="right")
-        ctk.CTkLabel(top, text="Flips the zone color during pulse (High Visibility)", font=("Segoe UI", 10), text_color="#555").pack(pady=(0, 10))
+        ctk.CTkLabel(container, text="Flips the zone color during pulse (High Visibility)", font=("Segoe UI", 10), text_color="#555").pack(pady=(0, 10))
 
         # Toggle 2: Solo Focus Mode
         f2 = ctk.CTkFrame(container, fg_color="transparent")
@@ -1260,7 +1260,7 @@ class LegionLightApp(ctk.CTk):
         ctk.CTkLabel(f2, text="Solo Focus Mode", font=("Segoe UI", 13), text_color="#ccc").pack(side="left")
         ctk.CTkSwitch(f2, text="", variable=self.pref_solo_mode, width=40,
                       command=self.save_settings).pack(side="right")
-        ctk.CTkLabel(top, text="Darkens other zones when picking colors", font=("Segoe UI", 10), text_color="#555").pack(pady=(0, 20))
+        ctk.CTkLabel(container, text="Darkens other zones when picking colors", font=("Segoe UI", 10), text_color="#555").pack(pady=(0, 20))
         
         # --- Battery Thresholds ---
         ctk.CTkLabel(container, text="BATTERY THRESHOLDS", font=("Segoe UI", 12, "bold"), text_color=self.c_accent).pack(pady=(10, 5))
@@ -1435,7 +1435,7 @@ class LegionLightApp(ctk.CTk):
                 else:
                     btn.configure(fg_color="transparent", text_color="#aaa", hover_color="#333")
         # Wave Visibility
-        if self.effect_var.get() == "wave":
+        if self.effect_var.get() in ["wave", "Soft Wave"]:
             # Pack after control_bar_frame so it's in the right spot
             self.wave_frame.pack(fill="x", pady=(0, 15), after=self.control_bar_frame)
         else:
@@ -1830,7 +1830,10 @@ class LegionLightApp(ctk.CTk):
              
         elif effect == "Soft Wave":
              # Software rotation of 4 colors
-             return [self.color_vars[(step + i) % 4].get() for i in range(4)]
+             if self.wave_direction_var.get() == "RTL":
+                 return [self.color_vars[(step + i) % 4].get() for i in range(4)]
+             else: # LTR
+                 return [self.color_vars[(step - i) % 4].get() for i in range(4)]
              
         return ["000000"] * 4
 
