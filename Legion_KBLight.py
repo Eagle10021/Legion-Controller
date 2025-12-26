@@ -2002,9 +2002,15 @@ class LegionLightApp(ctk.CTk):
             self.power_controller.set_rapid(True)
 
     def on_closing(self):
-        # Instead of quitting, hide to tray
-        self.withdraw()
+        """Handle the X button click - Hide to tray instead of quitting"""
+        # Save current state before hiding
         self.save_settings()
+        
+        # Hide the window
+        self.withdraw()
+        
+        # For debugging
+        # print("Application minimized to tray. Right-click the icon to Exit.")
 
     def quit_app(self, icon=None, item=None):
         """Actually close the application"""

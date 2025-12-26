@@ -56,14 +56,17 @@ A graphical user interface for controlling keyboard RGB lighting and power modes
 *   **Intelligent Shortcut Behavior**: If the app is already running in the background, launching it again from a desktop shortcut or the application menu will automatically restore and focus the existing window.
 *   **Tray Menu**: Right-click the tray icon to access quick actions, including "Show Legion Control" or a complete "Exit".
 
+> [!NOTE]
+> **GNOME Users**: By default, GNOME Shell does not display system tray icons. To see the Legion Controller icon, you must install and enable the **AppIndicator and KStatusNotifierItem Support** extension. On Arch-based systems, you can install it via: `sudo pacman -S gnome-shell-extension-appindicator`
+
 ## Installation
 
 ### Prerequisites
-The application requires pyusb for hardware communication and customtkinter for the interface.
+The application requires pyusb for hardware communication, customtkinter for the interface, and pystray for system tray support.
 
 ```bash
 # Install dependencies
-pip install pyusb customtkinter Pillow
+pip install pyusb customtkinter Pillow pystray
 ```
 
 ### USB Access Permissions (udev)
