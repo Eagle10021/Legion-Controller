@@ -50,6 +50,12 @@ A graphical user interface for controlling keyboard RGB lighting and power modes
 *   **Aesthetic Themes**: Selectable UI skins including Miku (Teal), Teto (Red), and Neru (Gold). The UI dynamically adjusts text contrast to ensure black text on light colors and white text on dark colors.
 *   **Profile System**: Save, delete, export, and import complete lighting configurations as JSON files.
 
+### Background Persistence and Instance Control
+*   **System Tray Integration**: Closing the main window (X button) now minimizes the app to the system tray instead of quitting. This allows software-driven animations and battery monitoring to continue running in the background.
+*   **Single-Instance Lock**: The application uses a local socket to ensure only one instance is active.
+*   **Intelligent Shortcut Behavior**: If the app is already running in the background, launching it again from a desktop shortcut or the application menu will automatically restore and focus the existing window.
+*   **Tray Menu**: Right-click the tray icon to access quick actions, including "Show Legion Control" or a complete "Exit".
+
 ## Installation
 
 ### Prerequisites

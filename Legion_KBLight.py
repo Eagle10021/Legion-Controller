@@ -10,6 +10,10 @@ import math
 import random
 import colorsys
 import usb.core
+import socket
+import threading
+import pystray
+from pystray import MenuItem as item
 import customtkinter as ctk
 from PIL import Image, ImageOps, ImageDraw
 
@@ -236,6 +240,9 @@ class LegionLightApp(ctk.CTk):
             try:
                 with open(self.cache_file, "r") as f: self.sys_info_cache = json.load(f)
             except: pass
+
+        self.setup_tray()
+        self.start_instance_listener()
         self.root_info_attempted = "RAM Speed" in self.sys_info_cache
         self.sys_scan_done = "CPU Speed" in self.sys_info_cache
         
@@ -1995,13 +2002,88 @@ class LegionLightApp(ctk.CTk):
             self.power_controller.set_rapid(True)
 
     def on_closing(self):
-        # Hide window immediately so user doesn't see slow destruction
+        # Instead of quitting, hide to tray
         self.withdraw()
         self.save_settings()
+
+    def quit_app(self, icon=None, item=None):
+        """Actually close the application"""
+        self.save_settings()
+        if hasattr(self, 'tray_icon') and self.tray_icon:
+            self.tray_icon.stop()
         self.quit()
         self.destroy()
+        os._exit(0)
+
+    def show_window(self, icon=None, item=None):
+        """Bring the window back from the tray"""
+        self.deiconify()
+        self.lift()
+        self.focus_force()
+
+    def setup_tray(self):
+        """Initialize the system tray icon"""
+        # Create a simple icon using our existing get_icon method
+        # We need a PIL image for pystray
+        img = self.get_icon("bolt", self.c_accent, 64) 
+        # get_icon returns a CTkImage, we need the raw PIL image if possible or recreate it
+        
+        # Helper to get raw PIL image for tray
+        side = 64
+        tray_img = Image.new("RGBA", (side, side), (0,0,0,0))
+        draw = ImageDraw.Draw(tray_img)
+        points = [(side*0.6, side*0.1), (side*0.2, side*0.55), (side*0.5, side*0.55), 
+                  (side*0.4, side*0.9), (side*0.8, side*0.45), (side*0.5, side*0.45)]
+        draw.polygon(points, fill=self.c_accent)
+
+        menu = (
+            item('Show Legion Control', self.show_window, default=True),
+            item('Exit', self.quit_app)
+        )
+        self.tray_icon = pystray.Icon("legioncontrol", tray_img, "Legion Control", menu)
+        
+        # Start tray in a background thread so it doesn't block mainloop
+        threading.Thread(target=self.tray_icon.run, daemon=True).start()
+
+    def start_instance_listener(self):
+        """Listen for signals from new instances to show window"""
+        def listen():
+            try:
+                # Use a high port for local communication
+                server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                # Allow address reuse
+                server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                server.bind(('127.0.0.1', 65432))
+                server.listen(1)
+                while True:
+                    conn, addr = server.accept()
+                    data = conn.recv(1024).decode()
+                    if data == "show":
+                        self.after(0, self.show_window)
+                    conn.close()
+            except:
+                pass # Already running instance handles this
+
+        threading.Thread(target=listen, daemon=True).start()
+
+def check_single_instance():
+    """Returns True if this is the only instance, or contacts existing one and returns False"""
+    try:
+        # Try to contact existing instance
+        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client.settimeout(1.0)
+        client.connect(('127.0.0.1', 65432))
+        client.send("show".encode())
+        client.close()
+        return False # Existing instance found and notified
+    except:
+        return True # No existing instance found
 
 if __name__ == "__main__":
-    app = LegionLightApp()
-    app.protocol("WM_DELETE_WINDOW", app.on_closing)
-    app.mainloop()
+    if check_single_instance():
+        app = LegionLightApp()
+        app.protocol("WM_DELETE_WINDOW", app.on_closing)
+        app.mainloop()
+    else:
+        # App is already running and has been notified to show window
+        sys.exit(0)
