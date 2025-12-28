@@ -141,8 +141,10 @@ class PowerController:
              if found: self.CONSERVATION_PATH = found
         if not self.CONSERVATION_PATH: self.CONSERVATION_PATH = os.path.join(base_path, "conservation_mode")
         if not self.RAPID_CHARGE_PATH: self.RAPID_CHARGE_PATH = os.path.join(base_path, "rapid_charge")
+        
+        self.HAS_ACPI_CALL = os.path.exists("/proc/acpi/call")
         self.has_conservation = os.path.exists(self.CONSERVATION_PATH)
-        self.has_rapid = os.path.exists(self.RAPID_CHARGE_PATH)
+        self.has_rapid = os.path.exists(self.RAPID_CHARGE_PATH) or self.HAS_ACPI_CALL
 
     def get_conservation(self):
         if not self.has_conservation: return False
@@ -164,12 +166,28 @@ class PowerController:
         except: return False
 
     def set_rapid(self, enable):
-        if not self.has_rapid: return
-        val = '1' if enable else '0'
+        # Prefer sysfs if it exists
+        if os.path.exists(self.RAPID_CHARGE_PATH):
+            val = '1' if enable else '0'
+            try:
+                with open(self.RAPID_CHARGE_PATH, 'w') as f: f.write(val)
+            except PermissionError:
+                os.system(f"pkexec sh -c 'echo {val} > \"{self.RAPID_CHARGE_PATH}\"'")
+            return
+
+        # Fallback to ACPI call if available
+        if self.HAS_ACPI_CALL:
+            cmd = "\\_SB.PCI0.LPC0.EC0.VPC0.SBMC " + ("0x07" if enable else "0x08")
+            self._call_acpi(cmd)
+
+    def _call_acpi(self, call_str):
+        """Helper to send raw ACPI calls via the acpi_call kernel module"""
+        if not self.HAS_ACPI_CALL: return
         try:
-            with open(self.RAPID_CHARGE_PATH, 'w') as f: f.write(val)
-        except PermissionError:
-            os.system(f"pkexec sh -c 'echo {val} > \"{self.RAPID_CHARGE_PATH}\"'")
+            # We use pkexec to write to /proc/acpi/call as it requires root
+            os.system(f"pkexec sh -c 'echo \"{call_str}\" > /proc/acpi/call'")
+        except Exception as e:
+            print(f"ACPI Call failed: {e}")
 
 # --- Main Application ---
 class LegionLightApp(ctk.CTk):

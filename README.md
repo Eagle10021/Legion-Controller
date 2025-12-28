@@ -38,6 +38,7 @@ A graphical user interface for controlling keyboard RGB lighting and power modes
     *   **Health Tracking**: Compare current Wh capacity against original design capacity.
     *   **Time Estimates**: Dynamic calculations for time until empty or time until full charge.
 *   **Power Mode Control**: Direct toggle for Conservation Mode (limiting charge to 60-80% for battery longevity) and Normal/Rapid charging modes.
+    *   **ACPI Fallback**: Supports raw ACPI calls for Rapid Charge controls on models where standard `ideapad_acpi` drivers are limited (requires `acpi_call` kernel module).
 
 ### User Experience and Customization
 *   **Focus Utilities**: 
@@ -93,6 +94,25 @@ By default, Linux limits USB device access. You must create a udev rule to run t
     ```bash
     sudo udevadm control --reload-rules && sudo udevadm trigger
     ```
+
+### Desktop Integration (App Menu)
+To make Legion Controller appear in your applications menu, create a desktop entry:
+
+1.  Create the file: `nano ~/.local/share/applications/legion-controller.desktop`
+2.  Paste the following (Replace `/path/to/folder/` with the actual path to this repository):
+
+```ini
+[Desktop Entry]
+Type=Application
+Name=Legion Controller
+Comment=Keyboard RGB and Power Controller
+Exec=python3 /path/to/folder/Legion_KBLight.py
+Icon=/path/to/folder/images/Senko_Loaf.jpg
+Terminal=false
+Categories=System;Utility;
+```
+
+3. Save and close. The app should now appear in your launcher (GNOME, KDE, etc.).
 
 ## Development and Credits
 *   **Backend**: Built on reverse-engineering work from the l5p-kbl projects by Drakanio and Shara.
