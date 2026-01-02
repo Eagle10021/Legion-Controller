@@ -12,8 +12,6 @@ import colorsys
 import usb.core
 import socket
 import threading
-import time
-from datetime import datetime
 import pystray
 from pystray import MenuItem as item
 import customtkinter as ctk
@@ -152,10 +150,7 @@ class PowerController:
         if not self.has_conservation: return False
         try:
             with open(self.CONSERVATION_PATH, 'r') as f: return f.read().strip() == '1'
-        except:
-             # If ACPI or fallback, we might not have read access, return cached or False
-             return False 
-
+        except: return False
     def set_conservation(self, enable):
         if not self.has_conservation: return
         val = '1' if enable else '0'
@@ -269,20 +264,10 @@ class LegionLightApp(ctk.CTk):
         self.root_info_attempted = "RAM Speed" in self.sys_info_cache
         self.sys_scan_done = "CPU Speed" in self.sys_info_cache
         
-        # Automation State
-        self.automations = [] # List of dicts: {"type": "schedule/routine", "trigger": "", "action": "", "value": ""}
-        self.last_ac_online = None # To track state changes
-        self.last_min_checked = -1 # To prevent firing schedule multiple times in same minute
-
-        self.check_automations_loop() # Start automation timer, now that variables are ready
-
         # Flag to prevent saving during startup
         self._is_loading = True
         
         self.load_settings()
-        
-        # Fire startup routine after a short delay to ensure UI is ready
-        self.after(1000, lambda: self.check_routines("event_startup"))
         
         # Determine initial accent color from loaded variable
         initial_theme = self.theme_var_str.get()
@@ -338,57 +323,7 @@ class LegionLightApp(ctk.CTk):
         # Global deselect: clicking any black space in the app clears zone focus
         self.root_frame.bind("<Button-1>", lambda e: self.select_zone(-1), add="+")
         
-    # --- Automation Logic ---
-    def check_automations_loop(self):
-        """Periodically check for time-based schedules"""
-        now = datetime.now()
-        curr_min = now.minute
-        
-        # Only check once per minute
-        if curr_min != self.last_min_checked:
-            time_str = f"time_{now.strftime('%H:%M')}"
-            for auto in self.automations:
-                if auto.get("type") == "schedule" and auto.get("trigger") == time_str:
-                    self.execute_automation(auto.get("action"), auto.get("value"))
-            self.last_min_checked = curr_min
-            
-        self.after(2000, self.check_automations_loop) # Check every 2s
-
-    def check_routines(self, event_type):
-        """Check and execute event-based routines"""
-        for auto in self.automations:
-            if auto.get("type") == "routine" and auto.get("trigger") == event_type:
-                self.execute_automation(auto.get("action"), auto.get("value"))
-
-    def execute_automation(self, action, value):
-        """Perform the requested action"""
-        print(f"Executing Automation: {action} -> {value}")
-        
-        if action == "profile":
-            if value in self.profiles:
-                self.load_profile(value)
-                self.current_profile_var.set(value)
-        
-        elif action == "brightness":
-            val = value.upper()
-            if val in ["OFF", "LOW", "HIGH"]:
-                # Map to btn clicks to handle logic
-                self._on_bright_seg_click(val)
-                self.on_setting_changed()
-                
-        elif action == "power_mode":
-            # Map friendly names to logic
-            if "conservation" in value.lower():
-                self.power_mode_var.set("Conservation Mode")
-                self.set_power_mode("Conservation Mode")
-            elif "rapid" in value.lower():
-                self.power_mode_var.set("Rapid Charge")
-                self.set_power_mode("Rapid Charge")
-            elif "normal" in value.lower():
-                self.power_mode_var.set("Normal Charging")
-                self.set_power_mode("Normal Charging")
-
-    # --- Hardware Update Loop ---
+        # --- Header (Packed Top) ---
         header = ctk.CTkFrame(self.root_frame, fg_color="transparent")
         header.pack(side="top", fill="x", padx=40, pady=(20, 10))
         header.bind("<Button-1>", lambda e: self.select_zone(-1), add="+")
@@ -433,11 +368,6 @@ class LegionLightApp(ctk.CTk):
         ctk.CTkButton(theme_frame, text="", image=self.get_icon("settings", "#ffffff", 18), 
                       width=32, height=32, fg_color="#2b2b2b", hover_color="#3a3a3a", 
                       corner_radius=8, command=self.show_ui_settings).pack(side="left", padx=(10, 0))
-
-        # Automations Button (Clock)
-        # Using a simple text icon "⏱" or similar if get_icon fails, but assuming get_icon
-        ctk.CTkButton(theme_frame, text="⚡", width=32, height=32, fg_color="#2b2b2b", hover_color="#3a3a3a", 
-                      corner_radius=8, command=self.show_automation_ui).pack(side="left", padx=(5, 0))
 
         # --- Footer (Packed Bottom) ---
         # Pack footer BEFORE content to ensure it sticks to the bottom and isn't pushed off by expandable content
@@ -871,7 +801,7 @@ class LegionLightApp(ctk.CTk):
                 # Determine display color for cursor
                 disp_col = self.c_accent
                 if self.pref_blink_opposite.get() and not self.blink_active:
-                     # Inverted mode, the "off" phase highlight is white or black
+                     # In inverted mode, the "off" phase highlight is white or black
                      disp_col = "#ffffff"
                 
                 # If blink is active, draw a thicker, brighter ring
@@ -974,44 +904,14 @@ class LegionLightApp(ctk.CTk):
         data = self.get_battery_status_data()
         
         if hasattr(self, 'batt_perc_label'):
-            batt_percent = data['capacity']
-            status = data['status']
-            
-            # Determine color based on percentage and status
-            color = self.c_text
-            if status == "Discharging" and batt_percent <= self.pref_batt_low.get():
-                color = "#ff4444" # Red for low battery
-            elif status == "Charging" and batt_percent >= self.pref_batt_full.get():
-                color = "#44ff44" # Green for nearly full while charging
-            elif status == "Charging":
-                color = self.c_accent # Accent color for charging
-            elif batt_percent >= self.pref_batt_green.get():
-                color = "#44ff44" # Green for high battery
-            
-            # Update labels
-            self.batt_perc_label.configure(text=f"{batt_percent:.0f}%", text_color=color)
-            self.batt_icon_label.configure(image=self.get_icon("bolt" if status == "Charging" else "battery", color, 24))
-            self.batt_bar.set(batt_percent / 100)
-            self.batt_bar.configure(progress_color=color)
-            
-            # --- Automation Event Trigger ---
-            # Using real-time 'status' to detect AC connection (Charging/Full usually mean AC)
-            # A more robust check might be reading /sys/class/power_supply/ADP1/online if available
-            is_ac = status in ["Charging", "Full", "Not charging"]
-            
-            if self.last_ac_online is not None:
-                if is_ac and not self.last_ac_online:
-                     # Plugged In
-                     self.check_routines("event_ac_connect")
-                elif not is_ac and self.last_ac_online:
-                     # Unplugged
-                     self.check_routines("event_ac_disconnect")
-            
-            self.last_ac_online = is_ac
-            # --------------------------------
-            
-            self.batt_status_label.configure(text=f"Status: {status}", text_color=color)
+            self.batt_perc_label.configure(text=f"{data['capacity']}%")
+            self.batt_bar.set(data['capacity'] / 100.0)
+            self.batt_status_label.configure(text=f"Status: {data['status']}")
             self.batt_time_label.configure(text=data["time_str"])
+            
+            # Update Icon (Pure white, no theme sync)
+            icon_name = "bolt" if data['status'] == "Charging" else "battery"
+            self.batt_icon_label.configure(image=self.get_icon(icon_name, "#ffffff", 24))
             
             # Health & Capacity Labels
             if "health" in data:
@@ -1420,135 +1320,6 @@ class LegionLightApp(ctk.CTk):
 
         ctk.CTkButton(top, text="CLOSE", width=120, height=32, fg_color="#333", hover_color="#444", 
                       command=top.destroy, corner_radius=6).pack(pady=20)
-
-    def show_automation_ui(self):
-        """Show the Automation Center for Schedules and Routines"""
-        top = ctk.CTkToplevel(self)
-        top.title("Automation Center")
-        top.geometry("600x550")
-        top.attributes("-topmost", True)
-        top.configure(fg_color=self.c_bg)
-        
-        # Center popup
-        x = self.winfo_x() + (self.winfo_width() // 2) - 300
-        y = self.winfo_y() + (self.winfo_height() // 2) - 275
-        top.geometry(f"+{x}+{y}")
-        top.transient(self)
-
-        ctk.CTkLabel(top, text="AUTOMATION CENTER", font=("Segoe UI", 16, "bold"), text_color=self.c_text).pack(pady=(20, 10))
-
-        # Tabs
-        tabview = ctk.CTkTabview(top, width=560, height=450, fg_color="#222")
-        tabview.pack(pady=10)
-        
-        tab_routine = tabview.add("Event Routines")
-        tab_schedule = tabview.add("Time Schedules")
-        
-        # --- Helper to refresh lists ---
-        def refresh_list(container, auto_type):
-            for widget in container.winfo_children(): widget.destroy()
-            
-            for i, auto in enumerate(self.automations):
-                if auto.get("type") != auto_type: continue
-                
-                row = ctk.CTkFrame(container, fg_color="#333", corner_radius=6)
-                row.pack(fill="x", pady=2)
-                
-                trig_txt = auto.get("trigger", "").replace("_", " ").title()
-                if "time_" in auto.get("trigger", ""): trig_txt = f"At {auto.get('trigger').split('_')[1]}"
-                
-                ctk.CTkLabel(row, text=f"{trig_txt}", width=120, anchor="w", font=("Segoe UI", 12, "bold")).pack(side="left", padx=10)
-                ctk.CTkLabel(row, text="➜", width=20, text_color="#777").pack(side="left")
-                
-                act_txt = f"{auto.get('action').replace('_', ' ').title()}: {auto.get('value')}"
-                ctk.CTkLabel(row, text=act_txt, anchor="w", font=("Segoe UI", 12)).pack(side="left", padx=10, fill="x", expand=True)
-                
-                ctk.CTkButton(row, text="❌", width=30, fg_color="transparent", hover_color="#444", text_color="#ff5555",
-                              command=lambda idx=i: [self.automations.pop(idx), self.save_settings(), refresh_list(container, auto_type)]).pack(side="right", padx=5)
-
-        # --- ROUTINES TAB ---
-        r_ctrl = ctk.CTkFrame(tab_routine, fg_color="transparent")
-        r_ctrl.pack(fill="x", pady=(0, 10))
-        
-        # Trigger Dropdown
-        trig_opts = ["AC Connected", "AC Disconnected", "Startup"]
-        trig_map = {"AC Connected": "event_ac_connect", "AC Disconnected": "event_ac_disconnect", "Startup": "event_startup"}
-        r_trig_var = ctk.StringVar(value="AC Connected")
-        ctk.CTkOptionMenu(r_ctrl, variable=r_trig_var, values=trig_opts, width=140).pack(side="left", padx=5)
-        
-        # Action Dropdown
-        act_opts = ["Set Profile", "Set Brightness", "Set Power Mode"]
-        act_map = {"Set Profile": "profile", "Set Brightness": "brightness", "Set Power Mode": "power_mode"}
-        r_act_var = ctk.StringVar(value="Set Profile")
-        ctk.CTkOptionMenu(r_ctrl, variable=r_act_var, values=act_opts, width=130).pack(side="left", padx=5)
-        
-        # Value Input (Dynamic? For now just text or simple combos)
-        # To keep it simple, we'll use a generic entry or combo depending on action context would be complex. 
-        # Let's use a combo with "smart" values based on selection is hard in one-shot.
-        # Simplification: A value entry box. User types "High", "Rapid Charge", or Profile Name.
-        r_val_entry = ctk.CTkEntry(r_ctrl, placeholder_text="Value (e.g. High, Rapid)", width=120)
-        r_val_entry.pack(side="left", padx=5)
-        
-        def add_routine():
-            val = r_val_entry.get()
-            if not val: return
-            self.automations.append({
-                "type": "routine",
-                "trigger": trig_map[r_trig_var.get()],
-                "action": act_map[r_act_var.get()],
-                "value": val
-            })
-            self.save_settings()
-            refresh_list(r_list, "routine")
-            r_val_entry.delete(0, "end")
-            
-        ctk.CTkButton(r_ctrl, text="Add", width=50, command=add_routine, fg_color=self.c_accent, text_color="#000").pack(side="left", padx=5)
-        
-        ctk.CTkLabel(tab_routine, text="Values: Brightness (OFF/LOW/HIGH), Power (Conservation/Normal/Rapid), or Profile Name.", font=("Segoe UI", 10), text_color="#888").pack()
-        
-        r_list = ctk.CTkScrollableFrame(tab_routine, fg_color="transparent")
-        r_list.pack(fill="both", expand=True)
-        refresh_list(r_list, "routine")
-
-        # --- SCHEDULE TAB ---
-        s_ctrl = ctk.CTkFrame(tab_schedule, fg_color="transparent")
-        s_ctrl.pack(fill="x", pady=(0, 10))
-        
-        # Time Input
-        s_time_h = ctk.CTkComboBox(s_ctrl, values=[f"{i:02d}" for i in range(24)], width=60)
-        s_time_h.set("12")
-        s_time_h.pack(side="left", padx=2)
-        ctk.CTkLabel(s_ctrl, text=":").pack(side="left")
-        s_time_m = ctk.CTkComboBox(s_ctrl, values=[f"{i:02d}" for i in range(0, 60, 5)], width=60)
-        s_time_m.set("00")
-        s_time_m.pack(side="left", padx=2)
-        
-        # Reuse Action logic
-        s_act_var = ctk.StringVar(value="Set Brightness")
-        ctk.CTkOptionMenu(s_ctrl, variable=s_act_var, values=act_opts, width=130).pack(side="left", padx=5)
-        
-        s_val_entry = ctk.CTkEntry(s_ctrl, placeholder_text="Value", width=100)
-        s_val_entry.pack(side="left", padx=5)
-        
-        def add_schedule():
-            val = s_val_entry.get()
-            if not val: return
-            time_str = f"time_{s_time_h.get()}:{s_time_m.get()}"
-            self.automations.append({
-                "type": "schedule",
-                "trigger": time_str,
-                "action": act_map[s_act_var.get()],
-                "value": val
-            })
-            self.save_settings()
-            refresh_list(s_list, "schedule")
-            s_val_entry.delete(0, "end")
-            
-        ctk.CTkButton(s_ctrl, text="Add", width=50, command=add_schedule, fg_color=self.c_accent, text_color="#000").pack(side="left", padx=5)
-        
-        s_list = ctk.CTkScrollableFrame(tab_schedule, fg_color="transparent")
-        s_list.pack(fill="both", expand=True)
-        refresh_list(s_list, "schedule")
 
     def refresh_sys_info_ui(self):
         """Update existing labels or create them if missing (much faster than destroying)"""
@@ -2139,22 +1910,19 @@ class LegionLightApp(ctk.CTk):
             "live_preview": self.live_preview_var.get(),
             "current_profile": self.current_profile_var.get(),
             "color_history": self.color_history,
-            "controls": {
-                "blink_opposite": self.pref_blink_opposite.get(),
-                "solo_mode": self.pref_solo_mode.get()
-            },
+            "pref_blink_opposite": self.pref_blink_opposite.get(),
+            "pref_solo_mode": self.pref_solo_mode.get(),
             "pref_batt_low": self.pref_batt_low.get(),
             "pref_batt_green": self.pref_batt_green.get(),
             "pref_batt_full": self.pref_batt_full.get(),
-            "profiles": self.profiles,
-            "automations": self.automations
+            "profiles": self.profiles
         }
         try:
             config_path = os.path.join(current_dir, "config.json")
             with open(config_path, "w") as f:
                 json.dump(data, f)
-        except Exception as e:
-            print(f"Error saving settings: {e}")
+        except:
+            pass
 
     def load_settings(self):
         config_path = os.path.join(current_dir, "config.json")
@@ -2166,11 +1934,8 @@ class LegionLightApp(ctk.CTk):
                     self.theme_var_str.set(theme)
                     self.live_preview_var.set(data.get("live_preview", False))
                     self.color_history = data.get("color_history", ["#333333"] * 12)
-                    
-                    # Load controls from nested dictionary
-                    controls = data.get("controls", {})
-                    self.pref_blink_opposite.set(controls.get("blink_opposite", False))
-                    self.pref_solo_mode.set(controls.get("solo_mode", False))
+                    self.pref_blink_opposite.set(data.get("pref_blink_opposite", False))
+                    self.pref_solo_mode.set(data.get("pref_solo_mode", False))
                     
                     self.pref_batt_low.set(data.get("pref_batt_low", 15))
                     self.pref_batt_green.set(data.get("pref_batt_green", 75))
@@ -2178,8 +1943,6 @@ class LegionLightApp(ctk.CTk):
                     
                     self.profiles = data.get("profiles", {"Default": self._get_current_settings_dict()})
                     self.current_profile_var.set(data.get("current_profile", "Default"))
-                    
-                    self.automations = data.get("automations", [])
                     # REMOVED load_profile call here as it triggers UI updates too early
              else:
                  self.profiles = {"Default": self._get_current_settings_dict()}
