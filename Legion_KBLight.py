@@ -252,7 +252,6 @@ class LegionLightApp(ctk.CTk):
         self.blink_active = True
         self.blink_loop()
         self.sw_animation_loop()
-        self.check_automations_loop() # Start automation timer
         
         # Resize tracking to prevent infinite loops
         self.last_kb_size = (0, 0)
@@ -274,6 +273,8 @@ class LegionLightApp(ctk.CTk):
         self.automations = [] # List of dicts: {"type": "schedule/routine", "trigger": "", "action": "", "value": ""}
         self.last_ac_online = None # To track state changes
         self.last_min_checked = -1 # To prevent firing schedule multiple times in same minute
+
+        self.check_automations_loop() # Start automation timer, now that variables are ready
 
         # Flag to prevent saving during startup
         self._is_loading = True
