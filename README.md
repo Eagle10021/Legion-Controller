@@ -51,6 +51,9 @@ A graphical user interface for controlling keyboard RGB lighting and power modes
 *   **Aesthetic Themes**: Selectable UI skins including Miku (Teal), Teto (Red), and Neru (Gold). The UI dynamically adjusts text contrast to ensure black text on light colors and white text on dark colors.
 *   **Profile System**: Save, delete, export, and import complete lighting configurations as JSON files.
 *   **Centralized Settings**: A dedicated, scrollable settings menu accessible via the header gear icon for managing advanced feedback, battery thresholds, and background behavior.
+*   **Automation Center**: A powerful rules engine (accessible via the lightning bolt icon) for smart laptop management:
+    *   **Event Routines**: Trigger specific actions (e.g., Set Profile, Change Brightness) when events occur, such as connecting/disconnecting the charger or app startup.
+    *   **Time Schedules**: Schedule commands to run automatically at specific times of day.
 
 ### Background Persistence and Instance Control
 *   **System Tray Integration**: Closing the main window (X button) now minimizes the app to the system tray instead of quitting. This allows software-driven animations and battery monitoring to continue running in the background.
