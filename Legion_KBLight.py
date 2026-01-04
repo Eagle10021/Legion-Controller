@@ -1998,6 +1998,11 @@ class LegionLightApp(ctk.CTk):
             else:
                 colors.append(hex_val)
 
+        # Force firmware "off" state if all zones are black (000000) and mode is static
+        # This ensures the controller creates a true "off" state (Brightness 0) rather than displaying black at low brightness
+        if hw_effect == "static" and all(c == "000000" for c in colors) and not is_sw_anim:
+             hw_effect = "off"
+
         try:
             data = self.controller.build_control_string(
                 hw_effect, colors, self.speed_var.get(), 
