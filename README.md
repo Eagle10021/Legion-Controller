@@ -4,6 +4,8 @@ A graphical user interface for controlling keyboard RGB lighting and power modes
 
 ![Legion Controller Preview](images/preview.png)
 
+> **New in v2.1:** Now supports "One-Click" setup for Arch/Manjaro and other modern distros! Just run `./install.sh`.
+
 ## Core Features
 
 ### Advanced Lighting Architecture
@@ -64,12 +66,19 @@ A graphical user interface for controlling keyboard RGB lighting and power modes
 ## Installation
 
 ### Prerequisites
-The application requires pyusb for hardware communication, customtkinter for the interface, and pystray for system tray support.
+This application uses a self-contained environment script `run.sh` to ensure it works on all modern Linux distributions (including Arch/Manjaro which restrict global pip install).
 
-```bash
-# Install dependencies
-pip install pyusb customtkinter Pillow pystray
-```
+### Quick Start
+1.  **Clone or Download** this folder anywhere.
+2.  **Make executable**:
+    ```bash
+    chmod +x run.sh
+    ```
+3.  **Run**:
+    ```bash
+    ./run.sh
+    ```
+    The script will automatically set up a local Python environment and install all dependencies the first time you run it.
 
 ### USB Access Permissions (udev)
 By default, Linux limits USB device access. You must create a udev rule to run the controller without sudo.
@@ -96,18 +105,29 @@ By default, Linux limits USB device access. You must create a udev rule to run t
     ```
 
 ### Desktop Integration (App Menu)
-To make Legion Controller appear in your applications menu, create a desktop entry:
+
+#### Option 1: Automatic (Recommended)
+To make Legion Controller appear in your applications menu, simply run the installation script:
+
+```bash
+./install.sh
+```
+
+This will automatically generate a valid `.desktop` file pointing to the current folder location. If you move the folder later, just run this script again to update the shortcut.
+
+#### Option 2: Manual
+If you prefer to create the shortcut manually:
 
 1.  Create the file: `nano ~/.local/share/applications/legion-controller.desktop`
-2.  Paste the following (Replace `/path/to/folder/` with the actual path to this repository):
+2.  Paste the following (Replace `/path/to/folder/` with the actual **absolute path** to this repository):
 
 ```ini
 [Desktop Entry]
 Type=Application
 Name=Legion Controller
 Comment=Keyboard RGB and Power Controller
-Exec=python3 /path/to/folder/Legion_KBLight.py
-Icon=/path/to/folder/images/Senko_Loaf.jpg
+Exec="/path/to/folder/run.sh"
+Icon="/path/to/folder/images/Senko_Loaf.jpg"
 Terminal=false
 Categories=System;Utility;
 ```

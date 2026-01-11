@@ -59,15 +59,34 @@ class ToolTip:
 
 # --- Backend Classes ---
 class LedController:
+    """
+    Handles communication with the Lenovo Legion Lighting Hardware (ITE 8295 Chip).
+    Uses pyusb to send raw control packets to the device.
+    """
     VENDOR = 0x048D # Replace with your Vendor ID (from lsusb)
     PRODUCT = 0xC965 # Replace with your Product ID (from lsusb)
     EFFECT = {"static": 1, "breath": 3, "wave": 4, "hue": 6, "off": 1}
+
     def __init__(self):
+        """Finds and attaches to the USB device."""
         device = usb.core.find(idVendor=self.VENDOR, idProduct=self.PRODUCT)
         if device is None: pass
         self.device = device
 
     def build_control_string(self, effect, colors=None, speed=1, brightness=1, wave_direction=None):
+        """
+        Constructs the 32-byte data payload for the lighting controller.
+        
+        Args:
+            effect (str): 'static', 'breath', 'wave', 'hue', or 'off'
+            colors (list): List of 4 hex strings ['RRGGBB', ...] for the zones
+            speed (int): 1-4
+            brightness (int): 1 (Low) or 2 (High)
+            wave_direction (str): 'LTR' or 'RTL'
+            
+        Returns:
+            list: The byte array to send to the device
+        """
         data = [204, 22]
         if effect == "off":
             data.append(self.EFFECT["off"])
@@ -116,7 +135,12 @@ class LedController:
             self.device.ctrl_transfer(bmRequestType=0x21, bRequest=0x9, wValue=0x03CC, wIndex=0x00, data_or_wLength=data)
 
 class PowerController:
+    """
+    Manages Laptop Power Features (Conservation Mode, Rapid Charge).
+    Attempts to use sysfs paths first (newer Kernels), falling back to ACPI calls.
+    """
     def __init__(self):
+        """Discovers available power management paths in /sys/bus."""
         base_path = "/sys/bus/platform/drivers/ideapad_acpi/VPC2004:00"
         self.CONSERVATION_PATH = None
         self.RAPID_CHARGE_PATH = None
@@ -191,6 +215,10 @@ class PowerController:
 
 # --- Main Application ---
 class LegionLightApp(ctk.CTk):
+    """
+    Main GUI Window for Legion Control.
+    Handles UI rendering, User Input, and coordinating Hardware updates.
+    """
     def __init__(self):
         super().__init__(className="legioncontrol")
         self.title("Legion Control")
@@ -310,6 +338,7 @@ class LegionLightApp(ctk.CTk):
         self.after(800, finish_setup)
 
     def build_ui(self):
+        """Constructs the Layout, Widgets, and Event Bindings"""
         # Set minimum size
         self.minsize(1000, 700)
         
@@ -1967,7 +1996,10 @@ class LegionLightApp(ctk.CTk):
         # Don't pulse if effect is not static/breath or if brightness is off
         effect = self.effect_var.get()
         if is_blink and effect not in ["static", "breath"]: return
-        if self.brightness_var.get() == "OFF": return
+        if self.brightness_var.get() == "OFF":
+            # If brightness is somehow OFF, treat it as turning the effect OFF
+            effect = "off"
+
 
         # Software Animations map to hardware 'static' mode
         hw_effect = effect
@@ -2055,18 +2087,17 @@ class LegionLightApp(ctk.CTk):
 
     def setup_tray(self):
         """Initialize the system tray icon"""
-        # Create a simple icon using our existing get_icon method
-        # We need a PIL image for pystray
-        img = self.get_icon("bolt", self.c_accent, 64) 
-        # get_icon returns a CTkImage, we need the raw PIL image if possible or recreate it
-        
         # Helper to get raw PIL image for tray
         side = 64
         tray_img = Image.new("RGBA", (side, side), (0,0,0,0))
         draw = ImageDraw.Draw(tray_img)
+        
+        # Lightning Bolt Geometry (⚡ Emoji style)
         points = [(side*0.6, side*0.1), (side*0.2, side*0.55), (side*0.5, side*0.55), 
                   (side*0.4, side*0.9), (side*0.8, side*0.45), (side*0.5, side*0.45)]
-        draw.polygon(points, fill=self.c_accent)
+        
+        # Use bright yellow/gold to match the emoji
+        draw.polygon(points, fill="#FFD700")
 
         menu = (
             item('Show Legion Control', self.show_window, default=True),
