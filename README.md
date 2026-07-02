@@ -4,7 +4,7 @@ A graphical user interface for controlling keyboard RGB lighting and power modes
 
 ![Legion Controller Preview](images/preview.png)
 
-> **New in v2.1:** Now supports "One-Click" setup for Arch/Manjaro and other modern distros! Just run `./install.sh`.
+> **New in v2.1:** Now supports "One-Click" setup for Arch/Manjaro and other modern distros! Just run `./install.sh` or `install-kde.sh`.
 
 ## Core Features
 
