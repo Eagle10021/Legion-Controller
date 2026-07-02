@@ -109,14 +109,21 @@ By default, Linux limits USB device access. You must create a udev rule to run t
 #### Option 1: Automatic (Recommended)
 To make Legion Controller appear in your applications menu, simply run the installation script:
 
+**For Gnome:**
 ```bash
 ./install.sh
+```
+**For KDE Plasma:**
+```bash
+./install-kde.sh
 ```
 
 This will automatically generate a valid `.desktop` file pointing to the current folder location. If you move the folder later, just run this script again to update the shortcut.
 
 #### Option 2: Manual
 If you prefer to create the shortcut manually:
+
+**For Gnome:**
 
 1.  Create the file: `nano ~/.local/share/applications/legion-controller.desktop`
 2.  Paste the following (Replace `/path/to/folder/` with the actual **absolute path** to this repository):
@@ -129,6 +136,20 @@ Comment=Keyboard RGB and Power Controller
 Exec="/path/to/folder/run.sh"
 Icon="/path/to/folder/images/Senko_Loaf.jpg"
 Terminal=false
+Categories=System;Utility;
+```
+
+**For KDE Plasma:**
+```ini
+[Desktop Entry]
+Type=Application
+Name=Legion Controller
+Comment=Keyboard RGB and Power Controller
+Exec="/path/to/folder/run.sh"
+Icon="/path/to/folder/images/Senko_Loaf.png"
+Terminal=false
+StartupWMClass=Legioncontrol
+X-KDE-WindowClass=Legioncontrol
 Categories=System;Utility;
 ```
 
