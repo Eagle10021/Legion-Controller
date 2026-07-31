@@ -159,3 +159,8 @@ Categories=System;Utility;
 *   **Backend**: Built on reverse-engineering work from the l5p-kbl projects by Drakanio and Shara.
 *   **Icon**: Senko Loaf (images/Senko_Loaf.jpg).
 *   **Optimization**: Designed for the Lenovo Legion 5 Pro and similar 4-zone RGB laptop models.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
