@@ -1,166 +1,112 @@
-# Legion Controller
+# Legion Control
 
-A graphical user interface for controlling keyboard RGB lighting and power modes on Lenovo Legion laptops. This application is designed specifically for 4-zone RGB models and is optimized for Linux environments using Gnome on Wayland.
+Keyboard lighting, battery and charging control for Lenovo Legion laptops with a 4-zone RGB keyboard, for Linux. Built and tested on a **Legion 5 15ACH6H (Gen 6)** with KDE Plasma on Wayland; GNOME works too.
 
-![Legion Controller Preview](images/preview.png)
+![Legion Control](images/preview.png)
 
-> **New in v2.1:** Now supports "One-Click" setup for Arch/Manjaro and other modern distros! Just run `./install.sh` or `install-kde.sh`.
+## Features
 
-## Core Features
+**Lighting**
+* **Hardware effects:** Static, Breath, Wave (with direction) and Hue, run by the keyboard's own controller.
+* **Software effects:** Police, Scanner, Heartbeat, Fire, Soft Wave and a **Battery gauge** that turns the keyboard into a charge meter (blinks red when low, calm red while charging).
+* **Per-zone colours:** click a zone on the keyboard drawing to edit it alone, or click outside the keys to edit all four at once. Each zone has its own on/off button.
+* **Colour tools:** saturation/value square and hue bar, hex and RGB fields, 8 presets, 12 recent colours, and a Z1 → Z4 gradient.
+* **Live preview** sends every change straight to the keyboard; otherwise press **Apply**.
+* **Profiles:** save, switch, import and export lighting setups as JSON.
 
-### Advanced Lighting Architecture
-*   **Zone Management**: Complete control over the four distinct keyboard zones.
-    *   **Visual Selection**: Select zones directly by clicking the interactive keyboard preview.
-    *   **Power Toggling**: Each zone features an independent power control (lightning bolt icon) to turn specific areas on or off. Active zones display a glowing icon, while inactive zones stay dimmed.
-    *   **Deselection Logic**: Click the keyboard bezel or the application background to deselect all zones for global setting application.
-*   **Hardware FX**: Direct support for firmware-level Static, Breath, Wave, and Hue effects.
-*   **Software-Driven Animations**: Custom-coded patterns that expand hardware capability. Except for the Police effect, these patterns derive their colors from your user-assigned static zone colors.
-    *   **Police Strobe**: Alternates rapid red and blue flashes across keyboard halves (Fixed colors).
-    *   **Scanner**: A single beam that bounces back and forth across the four zones (Uses Zone 1 color).
-    *   **Heartbeat**: A cinematic double-pulse rhythm (Uses all 4 currently assigned zone colors).
-    *   **Fire Flicker**: Randomized warm-tone intensities simulating a live flame.
-    *   **Soft Wave**: A software-cycled rotation of your four assigned zone colors. Supports direction control (LTR/RTL).
-    *   **Battery Gauge**: Transforms the entire keyboard into a live, color-coded power meter that reflects your real-time charge level.
-*   **Gradient Generator**: Automatically calculates smooth color transitions for the middle zones by interpolating between your selections for Zone 1 and Zone 4.
+**Battery and power**
+* Charge, condition (capacity vs. design), wattage, time estimate and the current power profile (Fn+Q).
+* **Charging mode:** Normal, **Conservation** (holds the battery around 60-80 % for a longer life) and **Rapid Charge** where the kernel supports it.
 
-### Intelligent Battery Insight
-*   **Interactive Keyboard Gauge**: In Battery mode, the physical keyboard becomes a live progress bar.
-    *   **Dynamic Progress**: 0-24% (Zone 1), 25-49% (Zones 1-2), 50-94% (Zones 1-3), 95%+ (All Zones).
-    *   **Color Mapping**: Transitions from Red (Low) to Orange, Yellow-Gold, and finally Green (above 75%).
-    *   **BIOS Optimization**: The 100% "Full" state triggers at 95% charge to account for laptop BIOS limits that often stop charging at 96-98%.
-*   **Critical Alerts**:
-    *   **Emergency Pulse**: The entire keyboard blinks red when battery drops to 15% or lower while discharging.
-    *   **Charging Awareness**: If plugged in but still under the low threshold, the alarm calms to a solid red state on Zone 1 only to acknowledge connection without being distracting.
+**App**
+* Seven themes: Miku, Teto, Neru, Phrolova, Shorekeeper, Encore and MaoMao.
+* Lives in the system tray when closed, so software effects keep running; launching it again brings the window back.
+* Optional **Home Assistant** link (see below).
 
-### System Dashboard and Tools
-*   **Hardware Monitoring**: Real-time display of CPU, GPU, and RAM specifications.
-*   **Advanced Battery Diagnostics**: Beyond simple percentage, the dashboard tracks:
-    *   **Customizable Thresholds**: Set your own limits for Low Battery Alerts (Blink), Safe Levels (Green Shift), and Full Bar Triggers (BIOS Adjustment) via numeric input fields in the settings menu.
-    *   **Real-time Wattage**: Monitor exact discharge or charge speed in Watts.
-    *   **Health Tracking**: Compare current Wh capacity against original design capacity.
-    *   **Time Estimates**: Dynamic calculations for time until empty or time until full charge.
-*   **Power Mode Control**: Direct toggle for Conservation Mode (limiting charge to 60-80% for battery longevity) and Normal/Rapid charging modes.
-    *   **ACPI Fallback**: Supports raw ACPI calls for Rapid Charge controls on models where standard `ideapad_acpi` drivers are limited (requires `acpi_call` kernel module).
+## Install
 
-### User Experience and Customization
-*   **Focus Utilities**: 
-    *   **Blink Focus**: The selected zone pulses to help you identify which area you are editing. Supports color inversion for high-visibility focusing.
-    *   **Solo Mode**: Dims all other zones except the one currently selected.
-*   **Color Management**: 
-    *   **Integrated Picker**: High-precision SV canvas and Hue bar for custom color selection.
-    *   **Persistent History**: A 12-slot color history that saves across sessions.
-    *   **Presets**: Quick-select buttons for popular character-inspired palettes (Miku, Teto, Neru, Gumi).
-*   **Aesthetic Themes**: Selectable UI skins including Miku (Teal), Teto (Red), and Neru (Gold). The UI dynamically adjusts text contrast to ensure black text on light colors and white text on dark colors.
-*   **Profile System**: Save, delete, export, and import complete lighting configurations as JSON files.
-*   **Centralized Settings**: A dedicated, scrollable settings menu accessible via the header gear icon for managing advanced feedback, battery thresholds, and background behavior.
+Needs Python 3.10+, Tk, and on GNOME the AppIndicator extension for the tray icon.
 
-### Background Persistence and Instance Control
-*   **System Tray Integration**: Closing the main window (X button) now minimizes the app to the system tray instead of quitting. This allows software-driven animations and battery monitoring to continue running in the background.
-*   **Single-Instance Lock**: The application uses a local socket to ensure only one instance is active.
-*   **Intelligent Shortcut Behavior**: If the app is already running in the background, launching it again from a desktop shortcut or the application menu will automatically restore and focus the existing window.
-*   **Tray Menu**: Right-click the tray icon to access quick actions, including "Show Legion Control" or a complete "Exit".
-
-> [!NOTE]
-> **GNOME Users**: By default, GNOME Shell does not display system tray icons. To see the Legion Controller icon, you must install and enable the **AppIndicator and KStatusNotifierItem Support** extension. On Arch-based systems, you can install it via: `sudo pacman -S gnome-shell-extension-appindicator`
-
-## Installation
-
-### Prerequisites
-This application uses a self-contained environment script `run.sh` to ensure it works on all modern Linux distributions (including Arch/Manjaro which restrict global pip install).
-
-### Quick Start
-1.  **Clone or Download** this folder anywhere.
-2.  **Make executable**:
-    ```bash
-    chmod +x run.sh
-    ```
-3.  **Run**:
-    ```bash
-    ./run.sh
-    ```
-    The script will automatically set up a local Python environment and install all dependencies the first time you run it.
-
-### USB Access Permissions (udev)
-By default, Linux limits USB device access. You must create a udev rule to run the controller without sudo.
-
-1.  Identify your Keyboard Controller ID:
-    ```bash
-    lsusb | grep -i "Integrated Technology Express"
-    ```
-    (Note the four-digit ID after the colon, e.g., c965)
-
-2.  Create the rules file:
-    ```bash
-    sudo nano /etc/udev/rules.d/99-kblight.rules
-    ```
-
-3.  Insert the following (update idProduct if yours differs from c965):
-    ```text
-    SUBSYSTEM=="usb", ATTR{idVendor}=="048d", ATTR{idProduct}=="c965", MODE="0666"
-    ```
-
-4.  Reload the udev system:
-    ```bash
-    sudo udevadm control --reload-rules && sudo udevadm trigger
-    ```
-
-### Desktop Integration (App Menu)
-
-#### Option 1: Automatic (Recommended)
-To make Legion Controller appear in your applications menu, simply run the installation script:
-
-**For Gnome:**
 ```bash
-./install.sh
+git clone https://github.com/Eagle10021/Legion-Controller.git
+cd Legion-Controller
+./run.sh            # first run creates a venv and installs requirements.txt
 ```
-**For KDE Plasma:**
+
+### USB access (required)
+
+The lighting controller is a USB device, and Linux only lets root write to it by default. Add a udev rule once:
+
 ```bash
-./install-kde.sh
+lsusb | grep -i "Integrated Technology Express"   # note the ID after 048d:, usually c965
+echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="048d", ATTR{idProduct}=="c965", MODE="0666"' \
+  | sudo tee /etc/udev/rules.d/99-kblight.rules
+sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
-This will automatically generate a valid `.desktop` file pointing to the current folder location. If you move the folder later, just run this script again to update the shortcut.
+If your `lsusb` shows a different product ID, use it in the rule and in `LedController.PRODUCT` (`legion_control/hardware.py`).
 
-#### Option 2: Manual
-If you prefer to create the shortcut manually:
+### App menu entry
 
-**For Gnome:**
-
-1.  Create the file: `nano ~/.local/share/applications/legion-controller.desktop`
-2.  Paste the following (Replace `/path/to/folder/` with the actual **absolute path** to this repository):
-
-```ini
-[Desktop Entry]
-Type=Application
-Name=Legion Controller
-Comment=Keyboard RGB and Power Controller
-Exec="/path/to/folder/run.sh"
-Icon="/path/to/folder/images/Senko_Loaf.jpg"
-Terminal=false
-Categories=System;Utility;
+```bash
+./install-kde.sh    # KDE Plasma
+./install.sh        # GNOME
 ```
 
-**For KDE Plasma:**
-```ini
-[Desktop Entry]
-Type=Application
-Name=Legion Controller
-Comment=Keyboard RGB and Power Controller
-Exec="/path/to/folder/run.sh"
-Icon="/path/to/folder/images/Senko_Loaf.png"
-Terminal=false
-StartupWMClass=Legioncontrol
-X-KDE-WindowClass=Legioncontrol
-Categories=System;Utility;
+These create a `.desktop` file pointing at this folder; run them again if you move it. `./run.sh --hidden` starts straight to the tray (handy for autostart).
+
+### Charging mode permissions
+
+Conservation and Rapid Charge are files under `/sys/bus/platform/drivers/ideapad_acpi/`, writable only by root, so changing the mode shows a password prompt (one per change). To skip the prompt, give your user write access with a udev rule of your own. Rapid Charge needs the kernel's `rapid_charge` file or the `acpi_call` module; without either, only Normal and Conservation are shown.
+
+## Home Assistant
+
+Legion Control can report to [Home Assistant](https://www.home-assistant.io) and take commands from it, so automations (or a voice assistant) can change the keyboard.
+
+1. **In the app:** Settings (gear) → Home Assistant. Enter your HA URL and a long-lived access token (HA: your profile → Security). For commands, also set the address HA should reach this laptop on (a Tailscale IP works well), press **Generate command token**, then **Save & connect**. Changes apply immediately; the pill in the bottom bar shows the connection.
+2. **In Home Assistant:** copy [`examples/home-assistant/legion_control.yaml`](examples/home-assistant/legion_control.yaml) into `config/packages/`, put the laptop's address in it, and add the command token to `secrets.yaml`. The file explains each step.
+
+The app then keeps three entities up to date: `sensor.legion_battery` (% with charge mode, wattage, condition), `sensor.legion_keyboard` (effect, colours, brightness, profile) and `sensor.legion_power_profile`. The example package adds scripts to set a colour, effect, brightness or profile; their descriptions are written so an Assist/LLM agent picks the right one.
+
+Commands are plain HTTP, so anything can send them:
+
+```bash
+curl -X POST http://LAPTOP:47125/keyboard -H "Authorization: Bearer TOKEN" \
+     -d '{"color": "#39c5bb"}'    # or {"effect": "breath"}, {"brightness": "Off"}, {"profile": "Night"}
 ```
 
-3. Save and close. The app should now appear in your launcher (GNOME, KDE, etc.).
+## Settings and files
 
-## Development and Credits
-*   **Backend**: Built on reverse-engineering work from the l5p-kbl projects by Drakanio and Shara.
-*   **Icon**: Senko Loaf (images/Senko_Loaf.jpg).
-*   **Optimization**: Designed for the Lenovo Legion 5 Pro and similar 4-zone RGB laptop models.
+* Settings and profiles: `~/.config/legion-control/config.json` (private, `0600`, since it can hold the HA token). An old `config.json` next to the script is migrated on first start.
+* System info cache: `~/.cache/legion-control/`.
+* Run with `--verbose` to see what's happening (USB errors, HA commands) in the terminal.
+
+## Project layout
+
+| Path | What's in it |
+| :--- | :--- |
+| `Legion_KBLight.py` | Launcher (kept under the old name so existing shortcuts work) |
+| `legion_control/app.py` | The window: layout, events, loops, dialogs |
+| `legion_control/hardware.py` | USB packets for the ITE 8295 lighting chip; charging mode through `ideapad_acpi` |
+| `legion_control/effects.py` | Software effects, frame by frame |
+| `legion_control/battery.py` | Battery readings from `/sys/class/power_supply` |
+| `legion_control/widgets.py` | Keyboard drawing, colour picker, icons |
+| `legion_control/themes.py` | Themes and colour presets: one line each |
+| `legion_control/ha_link.py` | Home Assistant push and command server |
+| `legion_control/settings.py` | Config file, defaults and migration |
+| `legion_control/assets/` | Icon font (a subset of Material Design Icons) |
+| `tools/make_icon_font.py` | Rebuilds the icon font: `python3 tools/make_icon_font.py new-icon-name` |
+| `examples/home-assistant/` | Home Assistant package |
+| `l5p-kbl/` | Reference implementation the USB code is based on |
+
+**Other models:** the keyboard drawing in `widgets.py` (`_legion5_gen6_keys`) is measured from the Legion 5 Gen 6 keyboard. The lighting works on any 4-zone Legion with the same controller; if your layout differs, the key rectangles and `_ZONE_SPLITS` are the only things to change.
+
+## Credits
+
+* USB protocol from the [l5p-kbl](https://github.com/imShara/l5p-kbl) reverse-engineering work by Shara and Drakanio.
+* Icons: [Material Design Icons](https://pictogrammers.com/library/mdi/) by Pictogrammers (Pictogrammers Free License, see `legion_control/assets/MDI-LICENSE.txt`).
+* App icon: Senko Loaf (`images/Senko_Loaf.jpg`).
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
+MIT, see [LICENSE](LICENSE).

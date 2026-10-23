@@ -1,0 +1,101 @@
+# Legion Control <-> Home Assistant
+#
+# Put this file in <config>/packages/ and load packages from configuration.yaml:
+#   homeassistant:
+#     packages: !include_dir_named packages
+#
+# Then in Legion Control: Settings (gear) -> Home Assistant
+#   * Home Assistant URL ............ e.g. http://homeassistant.local:8123
+#   * Long-lived access token ....... HA: your profile -> Security -> Long-lived access tokens
+#   * Listen for commands on ........ the laptop's address HA can reach (a Tailscale IP works well)
+#   * Command port .................. 47125 (must match LAPTOP_ADDRESS below)
+#   * Command token ................. press "Generate", then put it in secrets.yaml:
+#
+# secrets.yaml:
+#   legion_command_auth: "Bearer <the command token from the app>"
+#
+# The app pushes these entities on its own (no config needed here):
+#   sensor.legion_battery        % with status, charge_mode, power_w, health_pct, estimate
+#   sensor.legion_keyboard       current effect with colors, brightness, speed, profile, profiles, effects
+#   sensor.legion_power_profile  low-power / balanced / performance / custom
+# They show as "unavailable" until the app has sent them once after HA starts.
+
+rest_command:
+  legion_keyboard:
+    # Replace LAPTOP_ADDRESS with the "Listen for commands on" address from the app
+    url: "http://LAPTOP_ADDRESS:47125/keyboard"
+    method: POST
+    headers:
+      Authorization: !secret legion_command_auth
+    content_type: application/json
+    payload: "{{ command | tojson }}"
+    timeout: 5
+
+script:
+  legion_keyboard_color:
+    alias: Legion keyboard colour
+    description: >-
+      Set the Legion laptop's keyboard backlight to one colour, given as a hex code like #ff0000.
+      Pick the hex code yourself for colour names (red = #ff0000, purple = #8000ff, ...).
+    icon: mdi:palette
+    fields:
+      color:
+        description: Hex colour, for example #39c5bb
+        required: true
+        example: "#39c5bb"
+        selector:
+          text:
+            multiline: false
+    sequence:
+      - action: rest_command.legion_keyboard
+        data:
+          command: {color: "{{ color }}"}
+
+  legion_keyboard_effect:
+    alias: Legion keyboard effect
+    description: >-
+      Change the Legion keyboard lighting effect. One of: static, breath, wave, hue, off,
+      Police, Scanner, Heartbeat, Fire, Battery (battery gauge), Soft Wave.
+    icon: mdi:led-strip-variant
+    fields:
+      effect:
+        description: Effect name
+        required: true
+        selector:
+          select:
+            options: [static, breath, wave, hue, "off", Police, Scanner, Heartbeat, Fire, Battery, Soft Wave]
+    sequence:
+      - action: rest_command.legion_keyboard
+        data:
+          command: {effect: "{{ effect }}"}
+
+  legion_keyboard_brightness:
+    alias: Legion keyboard brightness
+    description: Set the Legion keyboard backlight to off, low or high.
+    icon: mdi:brightness-6
+    fields:
+      brightness:
+        required: true
+        selector:
+          select:
+            options: ["Off", Low, High]
+    sequence:
+      - action: rest_command.legion_keyboard
+        data:
+          command: {brightness: "{{ brightness }}"}
+
+  legion_keyboard_profile:
+    alias: Legion keyboard profile
+    description: Load one of the saved Legion Control lighting profiles by name.
+    icon: mdi:folder-star
+    fields:
+      profile:
+        description: Profile name as saved in Legion Control (see sensor.legion_keyboard's profiles attribute)
+        required: true
+        selector:
+          text:
+            multiline: false
+    sequence:
+      - action: rest_command.legion_keyboard
+        data:
+          command: {profile: "{{ profile }}"}
