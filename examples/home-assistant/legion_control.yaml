@@ -14,6 +14,9 @@
 # secrets.yaml:
 #   legion_command_auth: "Bearer <the command token from the app>"
 #
+# The power scripts (legion_charge_mode, legion_power_profile) change root-only settings: without the
+# optional extras/99-legion-control-power.rules on the laptop, each change shows a password prompt there.
+#
 # The app pushes these entities on its own (no config needed here):
 #   sensor.legion_battery        % with status, charge_mode, power_w, health_pct, estimate
 #   sensor.legion_keyboard       current effect with colors, brightness, speed, profile, profiles, effects
@@ -54,8 +57,8 @@ script:
   legion_keyboard_effect:
     alias: Legion keyboard effect
     description: >-
-      Change the Legion keyboard lighting effect. One of: static, breath, wave, hue, off,
-      Police, Scanner, Heartbeat, Fire, Battery (battery gauge), Soft Wave.
+      Change the Legion keyboard lighting effect. One of: static, breath, wave (built-in rainbow, ignores colours), hue, off,
+      Police, Scanner, Heartbeat, Fire, Battery (battery gauge), Soft Wave (moves the zone colours along).
     icon: mdi:led-strip-variant
     fields:
       effect:
@@ -99,3 +102,87 @@ script:
       - action: rest_command.legion_keyboard
         data:
           command: {profile: "{{ profile }}"}
+
+  legion_keyboard_zones:
+    alias: Legion keyboard zone colours
+    description: >-
+      Give the Legion keyboard's four zones different colours, left to right (zone 4 is the numpad).
+      Use for requests like "left half red, right half blue" or "a gradient from pink to blue":
+      pick a hex code for every zone yourself.
+    icon: mdi:palette-swatch-variant
+    fields:
+      zone1:
+        description: Hex colour for zone 1 (left), e.g. #ff0000
+        required: true
+        selector:
+          text:
+            multiline: false
+      zone2:
+        description: Hex colour for zone 2
+        required: true
+        selector:
+          text:
+            multiline: false
+      zone3:
+        description: Hex colour for zone 3
+        required: true
+        selector:
+          text:
+            multiline: false
+      zone4:
+        description: Hex colour for zone 4 (numpad, right)
+        required: true
+        selector:
+          text:
+            multiline: false
+    sequence:
+      - action: rest_command.legion_keyboard
+        data:
+          command: {colors: ["{{ zone1 }}", "{{ zone2 }}", "{{ zone3 }}", "{{ zone4 }}"]}
+
+  legion_keyboard_speed:
+    alias: Legion keyboard animation speed
+    description: Set how fast the Legion keyboard's effect animates, 1 (slowest) to 4 (fastest).
+    icon: mdi:speedometer
+    fields:
+      speed:
+        required: true
+        selector: {number: {min: 1, max: 4, step: 1}}
+    sequence:
+      - action: rest_command.legion_keyboard
+        data:
+          command: {speed: "{{ speed | int }}"}
+
+  legion_charge_mode:
+    alias: Legion charging mode
+    description: >-
+      Set the Legion laptop's battery charging mode: normal, conservation (holds the battery around 60-80 %
+      for a longer life) or rapid (fast charging, if the laptop supports it).
+    icon: mdi:battery-charging
+    fields:
+      mode:
+        required: true
+        selector:
+          select:
+            options: [normal, conservation, rapid]
+    sequence:
+      - action: rest_command.legion_keyboard
+        data:
+          command: {charge_mode: "{{ mode }}"}
+
+  legion_power_profile:
+    alias: Legion power profile
+    description: >-
+      Set the Legion laptop's power profile (the Fn+Q modes): quiet (cool and silent), balanced, or
+      performance (fans up, for gaming).
+    icon: mdi:speedometer-medium
+    fields:
+      profile:
+        required: true
+        selector:
+          select:
+            options: [quiet, balanced, performance]
+    sequence:
+      - action: rest_command.legion_keyboard
+        data:
+          command: {power_profile: "{{ profile }}"}

@@ -19,7 +19,7 @@ from . import settings as cfg
 from . import sysinfo
 from . import themes as T
 from .ha_link import HALink
-from .hardware import LedController, PowerController, read_platform_profile
+from .hardware import LedController, PowerController, read_platform_profile, set_platform_profile
 from .widgets import (ColorPicker, KeyboardPreview, Segmented, ToolTip, battery_icon_name, hex_to_rgb, icon,
                       icon_image, rgb_to_hex)
 
@@ -29,6 +29,10 @@ INSTANCE_SOCKET = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "legio
 CHARGE_MODES = [("Normal Charging", "Normal", "power-plug"), ("Conservation Mode", "Conservation", "leaf"),
                 ("Rapid Charge", "Rapid", "flash")]
 PROFILE_NAMES = {"low-power": "Quiet", "balanced": "Balanced", "performance": "Performance", "custom": "Custom"}
+# Words Home Assistant (or a voice assistant) may send for charging modes and power profiles
+CHARGE_MODE_WORDS = {"normal": "Normal Charging", "conservation": "Conservation Mode", "rapid": "Rapid Charge"}
+PROFILE_WORDS = {"quiet": "low-power", "low-power": "low-power", "low power": "low-power", "balanced": "balanced",
+                 "performance": "performance", "custom": "custom"}
 NEUTRAL_BORDER = ["#979DA2", "#565B5E"]  # CustomTkinter's default entry border
 
 
@@ -84,6 +88,7 @@ class LegionApp(ctk.CTk):
         self.sysinfo = cfg.load_json(cfg.SYSINFO_CACHE)
         self._save_job = None
         self._loading = True
+        self._ui_calls = queue.Queue()  # work from background threads, run on the UI thread by command_loop
 
         self.ha = HALink(self.conf["home_assistant"])
 
@@ -682,8 +687,19 @@ class LegionApp(ctk.CTk):
             self.ha_pill.configure(text="HA " + ("connecting" if status == "Connecting" else "error"),
                                    image=icon("home-assistant", T.WARN, 16))
 
+    def call_soon(self, fn):
+        """Run fn on the UI thread (safe to call from any thread)."""
+        self._ui_calls.put(fn)
+
     def command_loop(self):
-        """Run commands queued by the Home Assistant link (on the UI thread)."""
+        """Run work queued by background threads and commands from the Home Assistant link (on the UI thread)."""
+        while True:
+            try:
+                self._ui_calls.get_nowait()()
+            except queue.Empty:
+                break
+            except Exception:
+                log.exception("Background task callback failed")
         while True:
             try:
                 cmd = self.ha.commands.get_nowait()
@@ -720,8 +736,20 @@ class LegionApp(ctk.CTk):
             self.ha.publish(self.snapshot(), force=force)
 
     def handle_command(self, cmd):
-        """Apply a keyboard command from Home Assistant: effect, color, colors, brightness, speed, profile."""
+        """
+        Apply a command from Home Assistant. Keyboard: effect, color, colors, brightness, speed, profile.
+        Power: charge_mode (normal / conservation / rapid) and power_profile (quiet / balanced / performance).
+        """
         log.info("HA command: %s", cmd)
+        word = str(cmd.get("charge_mode", "")).strip().lower()
+        mode = next((m for k, m in CHARGE_MODE_WORDS.items() if word.startswith(k) or word == m.lower()), None)
+        if mode:
+            self.set_charge_mode(mode)
+        profile = PROFILE_WORDS.get(str(cmd.get("power_profile", "")).strip().lower())
+        if profile:
+            self.set_power_profile(profile)
+        if not any(k in cmd for k in ("effect", "color", "colors", "brightness", "speed", "profile")):
+            return  # power-only command: leave the keyboard alone
         if cmd.get("profile") in self.profiles:
             self.load_profile(cmd["profile"], apply=False)
         eff = str(cmd.get("effect", "")).strip()
@@ -761,7 +789,17 @@ class LegionApp(ctk.CTk):
 
         def work():
             ok = self.power.set_mode(mode)
-            self.after(0, lambda: self._charge_mode_done(ok, mode))
+            self.call_soon(lambda: self._charge_mode_done(ok, mode))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def set_power_profile(self, profile):
+        """Fn+Q power profile; runs off the UI thread in case it needs a password prompt."""
+        def work():
+            ok = set_platform_profile(profile)
+            self.call_soon(lambda: (self.set_status(f"Power profile: {PROFILE_NAMES.get(profile, profile)}"
+                                                    if ok else "Power profile not changed"),
+                                    self.publish_ha(force=True)))
 
         threading.Thread(target=work, daemon=True).start()
 

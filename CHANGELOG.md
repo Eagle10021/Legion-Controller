@@ -17,6 +17,8 @@
 - Power profile (Fn+Q mode) and time estimate in the battery card; "Held by Conservation Mode" instead of a bare "Not charging".
 - `--hidden` (start in the tray) and `--verbose` (log to the terminal) launch options.
 - `tools/make_icon_font.py` to add icons.
+- Home Assistant commands for **charging mode** and **power profile** (Fn+Q), plus example scripts for per-zone colours and animation speed.
+- `extras/99-legion-control-power.rules`: optional udev rule so the `power` group can change charging mode and power profile without a password prompt.
 
 ### Fixed
 - With no zone selected, the colour picker, presets and recent colours silently recoloured **zone 4** (a `-1` index). They now apply to all zones, as the README always described.

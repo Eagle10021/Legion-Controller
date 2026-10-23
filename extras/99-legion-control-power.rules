@@ -1,0 +1,7 @@
+# Optional: let members of the "power" group change the charging mode and the power profile without a
+# password prompt (Legion Control's buttons and its Home Assistant commands then apply instantly).
+# Install:  sudo install -m 644 extras/99-legion-control-power.rules /etc/udev/rules.d/
+#           sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=platform --action=add
+# Check your groups with `id -nG`; change "power" below to a group you're in (e.g. wheel) if needed.
+ACTION=="add|bind", SUBSYSTEM=="platform", DRIVER=="ideapad_acpi", \
+  RUN+="/bin/sh -c 'for f in /sys%p/conservation_mode /sys%p/rapid_charge /sys/firmware/acpi/platform_profile; do [ -e $$f ] && chgrp power $$f && chmod g+w $$f; done'"

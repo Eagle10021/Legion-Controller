@@ -173,10 +173,42 @@ def _shq(s):
     return "'" + s.replace("'", "'\\''") + "'"
 
 
+PLATFORM_PROFILE = "/sys/firmware/acpi/platform_profile"
+
+
 def read_platform_profile():
-    """Current platform_profile (low-power / balanced / performance / custom), read-only."""
+    """Current platform_profile (low-power / balanced / performance / custom)."""
     try:
-        with open("/sys/firmware/acpi/platform_profile") as f:
+        with open(PLATFORM_PROFILE) as f:
             return f.read().strip()
     except OSError:
         return None
+
+
+def platform_profile_choices():
+    try:
+        with open(PLATFORM_PROFILE + "_choices") as f:
+            return f.read().split()
+    except OSError:
+        return []
+
+
+def set_platform_profile(profile):
+    """
+    Switch the power profile (same as Fn+Q). Writes directly if allowed (extras/99-legion-control-power.rules),
+    otherwise asks for the password once through pkexec. Returns True if the profile now reads back as requested.
+    """
+    if profile not in platform_profile_choices():
+        log.warning("Unknown power profile %r (choices: %s)", profile, platform_profile_choices())
+        return False
+    try:
+        with open(PLATFORM_PROFILE, "w") as f:
+            f.write(profile)
+    except PermissionError:
+        result = subprocess.run(["pkexec", "sh", "-c", f"echo {_shq(profile)} > {PLATFORM_PROFILE}"],
+                                capture_output=True, text=True)
+        if result.returncode != 0:
+            log.warning("Changing the power profile was cancelled or failed: %s", result.stderr.strip())
+    except OSError as e:
+        log.error("Changing the power profile failed: %s", e)
+    return read_platform_profile() == profile

@@ -57,7 +57,14 @@ These create a `.desktop` file pointing at this folder; run them again if you mo
 
 ### Charging mode permissions
 
-Conservation and Rapid Charge are files under `/sys/bus/platform/drivers/ideapad_acpi/`, writable only by root, so changing the mode shows a password prompt (one per change). To skip the prompt, give your user write access with a udev rule of your own. Rapid Charge needs the kernel's `rapid_charge` file or the `acpi_call` module; without either, only Normal and Conservation are shown.
+Conservation, Rapid Charge and the power profile (Fn+Q) are files under `/sys`, writable only by root, so changing them shows a password prompt (one per change). To skip the prompt, install the optional udev rule, which lets the `power` group write them (check `id -nG`; edit the group in the file if you're not in `power`):
+
+```bash
+sudo install -m 644 extras/99-legion-control-power.rules /etc/udev/rules.d/
+sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=platform --action=add
+```
+
+Rapid Charge needs the kernel's `rapid_charge` file or the `acpi_call` module; without either, only Normal and Conservation are shown.
 
 ## Home Assistant
 
@@ -66,13 +73,15 @@ Legion Control can report to [Home Assistant](https://www.home-assistant.io) and
 1. **In the app:** Settings (gear) → Home Assistant. Enter your HA URL and a long-lived access token (HA: your profile → Security). For commands, also set the address HA should reach this laptop on (a Tailscale IP works well), press **Generate command token**, then **Save & connect**. Changes apply immediately; the pill in the bottom bar shows the connection.
 2. **In Home Assistant:** copy [`examples/home-assistant/legion_control.yaml`](examples/home-assistant/legion_control.yaml) into `config/packages/`, put the laptop's address in it, and add the command token to `secrets.yaml`. The file explains each step.
 
-The app then keeps three entities up to date: `sensor.legion_battery` (% with charge mode, wattage, condition), `sensor.legion_keyboard` (effect, colours, brightness, profile) and `sensor.legion_power_profile`. The example package adds scripts to set a colour, effect, brightness or profile; their descriptions are written so an Assist/LLM agent picks the right one.
+The app then keeps three entities up to date: `sensor.legion_battery` (% with charge mode, wattage, condition), `sensor.legion_keyboard` (effect, colours, brightness, profile) and `sensor.legion_power_profile`. The example package adds scripts for one colour, a colour per zone, effect, brightness, speed, lighting profile, **charging mode** and **power profile**; their descriptions are written so an Assist/LLM agent picks the right one (and can combine several in one request). Charging mode and power profile need the udev rule above, or the laptop shows a password prompt.
 
 Commands are plain HTTP, so anything can send them:
 
 ```bash
 curl -X POST http://LAPTOP:47125/keyboard -H "Authorization: Bearer TOKEN" \
-     -d '{"color": "#39c5bb"}'    # or {"effect": "breath"}, {"brightness": "Off"}, {"profile": "Night"}
+     -d '{"color": "#39c5bb"}'
+# also: {"colors": ["#ff0000", "#ff8800", "#ffff00", "#00ff00"]}, {"effect": "breath", "speed": 3},
+#       {"brightness": "Off"}, {"profile": "Night"}, {"charge_mode": "conservation"}, {"power_profile": "quiet"}
 ```
 
 ## Settings and files
@@ -97,6 +106,7 @@ curl -X POST http://LAPTOP:47125/keyboard -H "Authorization: Bearer TOKEN" \
 | `legion_control/assets/` | Icon font (a subset of Material Design Icons) |
 | `tools/make_icon_font.py` | Rebuilds the icon font: `python3 tools/make_icon_font.py new-icon-name` |
 | `examples/home-assistant/` | Home Assistant package |
+| `extras/` | Optional udev rule for password-free charging mode and power profile changes |
 | `l5p-kbl/` | Reference implementation the USB code is based on |
 
 **Other models:** the keyboard drawing in `widgets.py` (`_legion5_gen6_keys`) is measured from the Legion 5 Gen 6 keyboard. The lighting works on any 4-zone Legion with the same controller; if your layout differs, the key rectangles and `_ZONE_SPLITS` are the only things to change.
