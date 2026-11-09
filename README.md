@@ -84,6 +84,12 @@ curl -X POST http://LAPTOP:47125/keyboard -H "Authorization: Bearer TOKEN" \
 #       {"brightness": "Off"}, {"profile": "Night"}, {"charge_mode": "conservation"}, {"power_profile": "quiet"}
 ```
 
+## Phone app
+
+[Longarm](https://github.com/Eagle10021/Longarm) controls the keyboard, screen brightness, volume, power profile and charging from Android, over Tailscale or the home network. Turn it on in **Settings → Longarm (phone app)**. The app finds the laptop, shows a code, and this app asks you to approve it.
+
+To switch local AI engines from the phone, add `ai_engines` to the `phone` section of the settings file (see Longarm's README). On a firewall-protected home network, allow TCP 47126 and UDP 47127.
+
 ## Settings and files
 
 * Settings and profiles: `~/.config/legion-control/config.json` (private, `0600`, since it can hold the HA token). An old `config.json` next to the script is migrated on first start.

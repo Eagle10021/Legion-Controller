@@ -20,7 +20,10 @@ from . import settings as cfg
 from . import sysinfo
 from . import themes as T
 from .ha_link import HALink
-from .hardware import LedController, PowerController, read_platform_profile, set_platform_profile
+from .hardware import (LedController, PowerController, platform_profile_choices, read_platform_profile,
+                       set_platform_profile)
+from .desktop import AIEngines
+from .phone_api import PhoneAPI
 from .widgets import (ColorPicker, KeyboardPreview, Segmented, ToolTip, battery_icon_name, hex_to_rgb, icon,
                       icon_image, rgb_to_hex)
 
@@ -99,6 +102,8 @@ class LegionApp(ctk.CTk):
         self._ui_calls = queue.Queue()  # work from background threads, run on the UI thread by command_loop
 
         self.ha = HALink(self.conf["home_assistant"])
+        self._phone_state = None  # refreshed on the UI thread, read by the API's threads
+        self.phone = self.new_phone_api()
 
         self.build_ui()
         self.load_profile(self.profile_var.get(), apply=False)
@@ -115,6 +120,7 @@ class LegionApp(ctk.CTk):
         self.after(250, self.command_loop)
         self.after(1000, self.ha_heartbeat)
         self.after(250, self.attention_loop)
+        self.after(500, self.phone_loop)
         attention.start_service(self.attention)
         self.pref_attention.trace_add("write", lambda *_: self.sync_attention_watcher())
         self.sync_attention_watcher()
@@ -752,6 +758,40 @@ class LegionApp(ctk.CTk):
                 log.exception("Home Assistant command failed: %s", cmd)
         self.after(250, self.command_loop)
 
+    def new_phone_api(self):
+        engines = self.conf["phone"].get("ai_engines") or []
+        ai = AIEngines(engines) if engines else None
+        return PhoneAPI(self.conf["phone"], lambda: self._phone_state,
+                        lambda cmd: self.call_soon(lambda: self.handle_command(cmd)), cfg.CONFIG_DIR,
+                        {"/ai": ai.route} if ai else None,
+                        lambda phone, code: self.call_soon(lambda: self.confirm_phone(phone, code)),
+                        (lambda: {"ai": ai.state()}) if ai else None)
+
+    def confirm_phone(self, phone, code):
+        """Asks whether to let a phone connect; the code must match the one the phone shows."""
+        self.show_window()
+        top = self.dialog("Connect a phone?", "380x220")
+        self.label(top, f"{phone} wants to connect", 14, "bold", T.TEXT).pack(pady=(20, 6))
+        self.label(top, "Allow it only if the phone shows this code:", 12).pack()
+        self.label(top, f"{code[:3]} {code[3:]}", 28, "bold", self.accent).pack(pady=8)
+
+        def answer(allow):
+            self.phone.answer_pairing(code, allow)
+            top.destroy()
+
+        row = ctk.CTkFrame(top, fg_color="transparent")
+        row.pack(pady=8)
+        ctk.CTkButton(row, text="Deny", width=120, height=32, fg_color=T.FIELD, hover_color=T.FIELD_HOVER,
+                      command=lambda: answer(False)).pack(side="left", padx=6)
+        ctk.CTkButton(row, text="Allow", width=120, height=32, fg_color=self.accent, hover_color=self.accent,
+                      text_color=self.on_accent, command=lambda: answer(True)).pack(side="left", padx=6)
+
+    def phone_loop(self):
+        """Keep a snapshot ready for the phone API, which can't read Tk variables from its own threads."""
+        if self.phone.enabled:
+            self._phone_state = {**self.snapshot(), "power_profiles": platform_profile_choices()}
+        self.after(1000, self.phone_loop)
+
     def ha_heartbeat(self):
         self.publish_ha(force=True)
         self.after(30000, self.ha_heartbeat)
@@ -1060,6 +1100,50 @@ class LegionApp(ctk.CTk):
         flash_hex.bind("<FocusOut>", commit_flash_hex)
         on_flash_source()
 
+        section("LONGARM (PHONE APP)", "keyboard-variant")
+        self.label(box, "Lets the Longarm Android app change the keyboard, screen brightness, volume and power "
+                        "settings over Tailscale or your home network. Copy the pairing code into the app.",
+                   11, color=T.TEXT_DIM, wraplength=470, justify="left").pack(anchor="w")
+        phone = self.conf["phone"]
+        phone_on = ctk.BooleanVar(value=phone["enabled"])
+        phone_status = self.label(box, "", 11, color=T.TEXT_DIM, wraplength=470, justify="left")
+
+        def show_phone():
+            where = ", ".join(self.phone.addresses) or "no address yet"
+            phone_status.configure(text=f"Status: {self.phone.status} · {where}")
+
+        def restart_phone():
+            if phone_on.get() and not phone["token"]:
+                phone["token"] = secrets.token_urlsafe(24)
+            phone["enabled"] = phone_on.get()
+            self.save_now()
+            self.phone.close()
+            self.phone = self.new_phone_api()
+            show_phone()
+
+        def new_phone_token():
+            phone["token"] = secrets.token_urlsafe(24)
+            restart_phone()
+
+        def copy_pairing_code():
+            if self.phone.addresses:
+                self.clipboard_clear()
+                self.clipboard_append(self.phone.pairing_code())
+
+        row = ctk.CTkFrame(box, fg_color="transparent")
+        row.pack(fill="x", pady=(8, 0))
+        self.label(row, "Allow the phone app", 13, color=T.TEXT).pack(side="left")
+        ctk.CTkSwitch(row, text="", variable=phone_on, width=44, progress_color=self.accent,
+                      command=restart_phone).pack(side="right")
+        phone_status.pack(anchor="w", pady=(4, 0))
+        row = ctk.CTkFrame(box, fg_color="transparent")
+        row.pack(fill="x", pady=(8, 0))
+        ctk.CTkButton(row, text="Copy pairing code", height=30, fg_color=T.FIELD, hover_color=T.FIELD_HOVER,
+                      font=self.font(11), command=copy_pairing_code).pack(side="left")
+        ctk.CTkButton(row, text="New token", height=30, fg_color=T.FIELD, hover_color=T.FIELD_HOVER,
+                      font=self.font(11), command=new_phone_token).pack(side="left", padx=(8, 0))
+        show_phone()
+
         section("HOME ASSISTANT", "home-assistant")
         self.label(box, "Sends battery, charging mode, power profile and keyboard state to Home Assistant, and "
                         "lets it change the keyboard. See examples/home-assistant in the repo for the HA side.",
@@ -1167,6 +1251,7 @@ class LegionApp(ctk.CTk):
     def _quit(self):
         self.save_now()
         self.ha.close()
+        self.phone.close()
         attention.set_kwin_watcher(False)
         if self._flashing:
             self.stop_flash()

@@ -36,6 +36,13 @@ DEFAULTS = {
         "port": 47125,
         "command_token": "",  # HA sends this as a Bearer token
     },
+    "phone": {
+        "enabled": False,
+        "listen": "",         # empty = this machine's Tailscale address
+        "port": 47126,
+        "token": "",          # the Android app sends this as a Bearer token
+        "ai_engines": [],     # {"id", "label", "container", "compose_dir"}: local AI stacks the app can switch between
+    },
 }
 
 
@@ -61,8 +68,9 @@ def load(app_dir):
         log.error("Could not read %s (%s); starting from defaults", CONFIG_PATH, e)
 
     merged = json.loads(json.dumps(DEFAULTS))
-    merged.update({k: v for k, v in data.items() if k in DEFAULTS and k != "home_assistant"})
+    merged.update({k: v for k, v in data.items() if k in DEFAULTS and k not in ("home_assistant", "phone")})
     merged["home_assistant"].update(data.get("home_assistant", {}))
+    merged["phone"].update(data.get("phone", {}))
     # The old app padded history with "#333333" placeholders
     merged["color_history"] = [c for c in merged["color_history"] if c.lower() not in ("#333333", "#000000")][:12]
     if not merged["profiles"]:
