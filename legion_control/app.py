@@ -13,6 +13,7 @@ from tkinter import filedialog
 import customtkinter as ctk
 import pystray
 
+from . import attention
 from . import battery as batt
 from . import effects as fx
 from . import settings as cfg
@@ -80,6 +81,13 @@ class LegionApp(ctk.CTk):
         self.pref_blink_opposite = ctk.BooleanVar(value=self.conf["pref_blink_opposite"])
         self.pref_solo = ctk.BooleanVar(value=self.conf["pref_solo_mode"])
         self.thresholds = [self.conf["pref_batt_low"], self.conf["pref_batt_green"], self.conf["pref_batt_full"]]
+        self.pref_attention = ctk.BooleanVar(value=self.conf["attention_flash"])
+        self.attention_color = self.conf["attention_color"]
+        self.pref_attention_my = ctk.BooleanVar(value=self.conf["attention_material_you"])
+        self._flash_color = self.attention_color
+        self.attention = attention.AttentionTracker()
+        self._flashing = False
+        self._flash_step = 0
         self.charge_mode = self.power.current_mode()
         self.blink_on = True
         self.sw_step = 0
@@ -106,6 +114,10 @@ class LegionApp(ctk.CTk):
         self.after(100, self.sw_loop)
         self.after(250, self.command_loop)
         self.after(1000, self.ha_heartbeat)
+        self.after(250, self.attention_loop)
+        attention.start_service(self.attention)
+        self.pref_attention.trace_add("write", lambda *_: self.sync_attention_watcher())
+        self.sync_attention_watcher()
 
     # ------------------------------------------------------------------ helpers
     def font(self, size, weight="normal"):
@@ -620,7 +632,8 @@ class LegionApp(ctk.CTk):
             hw_effect = "off"
         data = self.led.build_control_string(hw_effect, colors, self.speed, 2 if self.brightness == "High" else 1,
                                              self.direction if hw_effect == "wave" else None)
-        ok = self.led.send_control_string(data)
+        # An attention flash owns the keyboard; the state set here is sent when the flash ends
+        ok = self._flashing or self.led.send_control_string(data)
         if not ok:
             self.set_status("Couldn't write to the keyboard (see terminal)")
         elif manual:
@@ -652,6 +665,34 @@ class LegionApp(ctk.CTk):
             self.redraw_preview()
             self.sw_step += 1
         self.after(fx.frame_delay(self.effect, self.speed, self.sw_step), self.sw_loop)
+
+    def attention_loop(self):
+        """Flash over whatever the keyboard is showing while something waits, then put the lighting back."""
+        delay = 250
+        if self.pref_attention.get() and self.attention.active():
+            self._flashing = True
+            if self._flash_step == 0:  # read once per flash, so a new wallpaper's colour is picked up
+                self._flash_color = self.flash_color()
+            lit, delay = fx.ATTENTION_PATTERN[self._flash_step % len(fx.ATTENTION_PATTERN)]
+            self._flash_step += 1
+            if self.led and self.led.available:
+                color = self._flash_color if lit else "000000"
+                self.led.send_control_string(self.led.build_control_string("static", [color] * 4, 1, 2))
+        elif self._flashing:
+            self.stop_flash()
+        self.after(delay, self.attention_loop)
+
+    def flash_color(self):
+        """The colour a flash uses: Material You when selected and readable, otherwise the custom colour."""
+        return (self.pref_attention_my.get() and attention.material_you_color()) or self.attention_color
+
+    def stop_flash(self):
+        self._flashing = False
+        self._flash_step = 0
+        self.apply_settings()
+
+    def sync_attention_watcher(self):
+        threading.Thread(target=attention.set_kwin_watcher, args=(self.pref_attention.get(),), daemon=True).start()
 
     def battery_loop(self):
         self.battery = b = batt.read_battery(self.battery_path, self.power.get_conservation())
@@ -895,7 +936,9 @@ class LegionApp(ctk.CTk):
             "current_profile": self.profile_var.get(), "color_history": self.history,
             "pref_blink_opposite": self.pref_blink_opposite.get(), "pref_solo_mode": self.pref_solo.get(),
             "pref_batt_low": self.thresholds[0], "pref_batt_green": self.thresholds[1],
-            "pref_batt_full": self.thresholds[2], "profiles": self.profiles})
+            "pref_batt_full": self.thresholds[2], "attention_flash": self.pref_attention.get(),
+            "attention_color": self.attention_color, "attention_material_you": self.pref_attention_my.get(),
+            "profiles": self.profiles})
         try:
             cfg.save(self.conf)
         except OSError as e:
@@ -922,12 +965,13 @@ class LegionApp(ctk.CTk):
             ctk.CTkLabel(row, text="", image=icon(ic, self.accent, 18)).pack(side="left", padx=(0, 8))
             self.label(row, text, 12, "bold", self.accent).pack(side="left")
 
-        def switch(text, var, hint):
+        def switch(text, var, hint, then=None):
             row = ctk.CTkFrame(box, fg_color="transparent")
             row.pack(fill="x", pady=(4, 0))
             self.label(row, text, 13, color=T.TEXT).pack(side="left")
             ctk.CTkSwitch(row, text="", variable=var, width=44, progress_color=self.accent,
-                          command=lambda: (self.refresh_controls(), self.schedule_save())).pack(side="right")
+                          command=lambda: (self.refresh_controls(), self.schedule_save(),
+                                           then and then())).pack(side="right")
             self.label(box, hint, 11, color=T.TEXT_DIM).pack(anchor="w")
 
         section("ZONE EDITING", "keyboard-variant")
@@ -959,6 +1003,62 @@ class LegionApp(ctk.CTk):
 
             e.bind("<Return>", commit)
             e.bind("<FocusOut>", commit)
+
+        section("ATTENTION FLASH", "lightning-bolt")
+        switch("Flash when something needs you", self.pref_attention,
+               "Overrides the current lighting, even when it's off, until you respond.")
+
+        def on_flash_source():
+            swatch.configure(fg_color="#" + self.flash_color())
+            if self.pref_attention_my.get():
+                custom.pack_forget()
+            else:
+                custom.pack(fill="x", pady=(6, 0))
+
+        switch("Use Material You colour", self.pref_attention_my,
+               "Follows your wallpaper, made more vivid so it shows on the keys.", on_flash_source)
+        flash_area = ctk.CTkFrame(box, fg_color="transparent")
+        flash_area.pack(fill="x")
+        row = ctk.CTkFrame(flash_area, fg_color="transparent")
+        row.pack(fill="x", pady=(6, 0))
+        self.label(row, "Flash colour", 12).pack(side="left")
+        ctk.CTkButton(row, text="Test", width=56, height=28, fg_color=T.FIELD, hover_color=T.FIELD_HOVER,
+                      font=self.font(11), command=lambda: self.attention.set("test", True, ttl=5)).pack(side="right")
+        swatch = ctk.CTkFrame(row, width=28, height=28, corner_radius=6, fg_color="#" + self.flash_color())
+        swatch.pack(side="right", padx=(0, 8))
+        custom = ctk.CTkFrame(flash_area, fg_color="transparent")
+        hex_row = ctk.CTkFrame(custom, fg_color="transparent")
+        hex_row.pack(fill="x")
+        self.label(hex_row, "Hex", 12).pack(side="left")
+        flash_hex = ctk.CTkEntry(hex_row, width=84, height=28, justify="center", font=(self.FM, 12))
+        flash_hex.pack(side="right")
+
+        def use_flash_color(value):
+            self.attention_color = value
+            flash_hex.delete(0, "end")
+            flash_hex.insert(0, value)
+            flash_hex.configure(border_color=NEUTRAL_BORDER)
+            swatch.configure(fg_color="#" + self.flash_color())
+            self.schedule_save()
+
+        flash_picker = ColorPicker(custom, lambda value: use_flash_color(value.lstrip("#").lower()), height=110)
+        flash_picker.pack(fill="x", pady=(6, 0))
+        flash_picker.set_hex(self.attention_color)
+        flash_hex.insert(0, self.attention_color)
+
+        def commit_flash_hex(_e=None):
+            value = flash_hex.get().strip().lstrip("#").lower()
+            if re.fullmatch(r"[0-9a-f]{6}", value):
+                use_flash_color(value)
+                flash_picker.set_hex(value)
+            else:
+                flash_hex.configure(border_color=T.BAD)
+                flash_hex.delete(0, "end")
+                flash_hex.insert(0, self.attention_color)
+
+        flash_hex.bind("<Return>", commit_flash_hex)
+        flash_hex.bind("<FocusOut>", commit_flash_hex)
+        on_flash_source()
 
         section("HOME ASSISTANT", "home-assistant")
         self.label(box, "Sends battery, charging mode, power profile and keyboard state to Home Assistant, and "
@@ -1067,6 +1167,9 @@ class LegionApp(ctk.CTk):
     def _quit(self):
         self.save_now()
         self.ha.close()
+        attention.set_kwin_watcher(False)
+        if self._flashing:
+            self.stop_flash()
         if getattr(self, "tray", None):
             self.tray.stop()
         try:

@@ -21,6 +21,9 @@ EFFECT_ICONS = {
 }
 SHORT_LABELS = {"wave": "Wave", "hue": "Hue", "Battery": "Battery"}
 
+# Attention flash: (lit, milliseconds) steps, two quick flashes and then a pause
+ATTENTION_PATTERN = ((True, 180), (False, 180), (True, 180), (False, 900))
+
 
 def is_software(effect):
     return effect in SOFTWARE_EFFECTS

@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+### Added
+- **Attention flash:** the keyboard flashes over the current lighting, even when it's off, while a KDE window asks for attention or a Claude Code session is waiting, then returns to the previous lighting. Settings has the on/off switch, a colour picker or Material You colour (made vivid for the keys), and a test button. Other programs can report through the `org.legioncontrol.Attention` D-Bus service.
+
 ## [3.0.0] - 2026-10-23
 ### Changed
 - **Restructured** from one 2,150-line file into the `legion_control/` package (hardware, battery, effects, themes, settings, Home Assistant link, widgets, window). `Legion_KBLight.py` is now a small launcher under the same name, so `run.sh` and existing shortcuts keep working.

@@ -24,6 +24,9 @@ DEFAULTS = {
     "pref_batt_low": 15,
     "pref_batt_green": 75,
     "pref_batt_full": 95,
+    "attention_flash": True,
+    "attention_color": "ffb000",
+    "attention_material_you": False,
     "profiles": {"Default": dict(DEFAULT_PROFILE)},
     "home_assistant": {
         "enabled": False,
