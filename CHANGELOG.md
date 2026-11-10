@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 ### Added
+- **Device power from Longarm:** lock, sleep, restart and shutdown, with computer or server role and allow switches stored on this machine.
 - **Longarm support:** the [Longarm](https://github.com/Eagle10021/Longarm) Android app can control the keyboard, screen brightness, volume, power and charging over Tailscale or the home network, using an encrypted connection and a pairing code from Settings.
 - **Attention flash:** the keyboard flashes over the current lighting, even when it's off, while a KDE window asks for attention or a Claude Code session is waiting, then returns to the previous lighting. Settings has the on/off switch, a colour picker or Material You colour (made vivid for the keys), and a test button. Other programs can report through the `org.legioncontrol.Attention` D-Bus service.
 

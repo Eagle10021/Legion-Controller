@@ -40,6 +40,9 @@ DEFAULTS = {
         "enabled": False,
         "listen": "",         # empty = this machine's Tailscale address
         "port": 47126,
+        "role": "computer",   # "computer" or "server"; the app can change this and the two settings below
+        "allow_restart": True,
+        "allow_shutdown": True,
         "token": "",          # the Android app sends this as a Bearer token
         "ai_engines": [],     # {"id", "label", "container", "compose_dir"}: local AI stacks the app can switch between
     },

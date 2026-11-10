@@ -765,7 +765,7 @@ class LegionApp(ctk.CTk):
                         lambda cmd: self.call_soon(lambda: self.handle_command(cmd)), cfg.CONFIG_DIR,
                         {"/ai": ai.route} if ai else None,
                         lambda phone, code: self.call_soon(lambda: self.confirm_phone(phone, code)),
-                        (lambda: {"ai": ai.state()}) if ai else None)
+                        (lambda: {"ai": ai.state()}) if ai else None, lambda: self.call_soon(self.save_now))
 
     def confirm_phone(self, phone, code):
         """Asks whether to let a phone connect; the code must match the one the phone shows."""
